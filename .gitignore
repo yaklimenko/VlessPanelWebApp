@@ -1,0 +1,28 @@
+# Build artifacts
+/build/
+/frontend/dist/
+
+# Dependencies
+/frontend/node_modules/
+
+# Environment
+.env
+
+# Local panels config (contains real tokens)
+/panels.json
+
+# Test results (generated)
+/api-test-results.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Go
+*.exe
+*.test
+*.out

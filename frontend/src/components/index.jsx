@@ -1,0 +1,352 @@
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+
+// ─── Toast System ───
+const ToastContext = createContext(null);
+
+export function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+  const idCounter = useRef(0);
+
+  const showToast = useCallback((message, duration = 2500) => {
+    const id = ++idCounter.current;
+    setToasts(prev => [...prev, { id, message }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, duration);
+  }, []);
+
+  return (
+    <ToastContext.Provider value={showToast}>
+      {children}
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div key={t.id} className="toast">{t.message}</div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast() {
+  return useContext(ToastContext);
+}
+
+// ─── Modal ───
+export function Modal({ title, children, onClose }) {
+  useEffect(() => {
+    const handleEsc = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onClose]);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>{title}</h3>
+          <button className="btn btn-icon modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Header ───
+export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel }) {
+  return (
+    <header className="header">
+      <div className="header-left">
+        <div className="panel-select">
+          <select value={selectedPanelId || ''} onChange={e => onPanelChange(e.target.value)}>
+            {panels.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={onAddPanel}>+ Панель</button>
+      </div>
+      <div className="header-right">
+        <span className="app-title"><span className="accent">Vless</span>Panel</span>
+        <span className="app-version">v0.1</span>
+      </div>
+    </header>
+  );
+}
+
+// ─── ClientCard ───
+export function ClientCard({ client, isSelected, onToggle, onAddKey, onCopyKey }) {
+  return (
+    <div
+      className={`client-card ${isSelected ? 'selected' : ''}`}
+      onClick={onToggle}
+    >
+      <div className="client-card-top" onClick={e => e.stopPropagation()}>
+        <div>
+          <div className="client-name">{client.email}</div>
+          <div className="client-inbounds">({(client.inbounds || []).join(', ')})</div>
+        </div>
+        <div className="client-actions">
+          <button
+            className="btn btn-primary btn-xs add-key-btn"
+            onClick={(e) => { e.stopPropagation(); onAddKey(client); }}
+          >+ Ключ</button>
+          <button
+            className="btn btn-xs btn-icon key-toggle-btn"
+            onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            title="Показать VLESS-ключи"
+          >🔑</button>
+        </div>
+      </div>
+      <div className={`keys-dropdown ${isSelected ? 'open' : ''}`} onClick={e => e.stopPropagation()}>
+        <div className="keys-list">
+          {(client.keys || []).length === 0 && (
+            <span className="key-chip" style={{ opacity: 0.5, cursor: 'default' }}>Нет ключей</span>
+          )}
+          {(client.keys || []).map((k, idx) => (
+            <span
+              key={idx}
+              className="key-chip"
+              title={k.link}
+              onClick={() => onCopyKey(k)}
+            >{k.label}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SubscriptionCard ───
+export function SubscriptionCard({
+  subscription,
+  isOpen,
+  onToggle,
+  onCopyLink,
+  onRefresh,
+  onDelete,
+  onCopyKey,
+  onDeleteKey,
+  onAddKey,
+  newKeyValue,
+  onNewKeyChange,
+  onNewKeyConfirm,
+  onNewKeyCancel,
+  onTest,
+  showAddForm,
+  testing,
+  testResults,
+}) {
+  const parsedResults = parseTestResults(testResults || subscription.testResults);
+
+  return (
+    <div className={`sub-item ${isOpen ? 'open' : ''}`}>
+      <div className="sub-header" onClick={onToggle}>
+        <div>
+          <span className="sub-arrow">▶</span>
+          <span className="sub-title">{subscription.name}</span>
+          {parsedResults && (
+            <span className="badge" style={{ marginLeft: 6 }}>
+              {parsedResults.okCount}/{parsedResults.totalCount} ✅
+            </span>
+          )}
+        </div>
+        <div className="sub-actions" onClick={e => e.stopPropagation()}>
+          <button className="btn btn-xs btn-icon copy-sub-btn" onClick={onCopyLink} title="Копировать ссылку">📋</button>
+          <button className="btn btn-xs btn-icon refresh-sub-btn" onClick={onRefresh} title="Обновить">🔄</button>
+          <button className="btn btn-xs btn-icon btn-danger delete-sub-btn" onClick={onDelete} title="Удалить">🗑</button>
+        </div>
+      </div>
+      <div className="sub-body">
+        {(subscription.keys || []).map(k => (
+          <div key={k.id} className="sub-key-row">
+            <span className="mono" title={k.link}>{k.link}</span>
+            <span
+              className="copy-small copy-vless-btn"
+              onClick={() => onCopyKey(k)}
+            >📋</span>
+            <span
+              className="sub-key-del"
+              onClick={() => onDeleteKey(k.id)}
+              title="Удалить ключ"
+            >🗑</span>
+          </div>
+        ))}
+        <div className="sub-add-key-wrap">
+          {!showAddForm ? (
+            <button
+              className="btn btn-sm btn-primary sub-add-key-btn"
+              onClick={onAddKey}
+            >➕ Добавить ключ</button>
+          ) : (
+            <div className="sub-add-key-form">
+              <div className="sub-add-key-form-inner">
+                <input
+                  type="text"
+                  className="sub-add-key-input"
+                  placeholder="Вставьте vless:// или vmess:// ссылку..."
+                  value={newKeyValue}
+                  onChange={e => onNewKeyChange(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') onNewKeyConfirm(); }}
+                  autoFocus
+                />
+                <button className="btn btn-sm btn-success" onClick={onNewKeyConfirm}>➕ Добавить</button>
+                <button className="btn btn-sm" onClick={onNewKeyCancel}>Отмена</button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="test-section">
+          <button
+            className="btn btn-sm btn-success test-btn"
+            onClick={onTest}
+            disabled={testing}
+          >{testing ? '⏳ Тестируем...' : '▶ Тест VlessSubTest'}</button>
+          {parsedResults && parsedResults.rows.length > 0 && (
+            <div className="test-results">
+              <table className="test-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>IP</th>
+                    <th>Remarks</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsedResults.rows.map((row, i) => (
+                    <tr key={i}>
+                      <td>{row.keyIdx}</td>
+                      <td>{row.ip}</td>
+                      <td>{row.remark}</td>
+                      <td className={row.status === 'OK' ? 'ok' : 'failed'}>
+                        {row.status || 'FAILED'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function parseTestResults(str) {
+  if (!str) return null;
+  const lines = str.split('\n').filter(l => l.trim());
+  const summaryLine = lines[0] || '';
+  const m = summaryLine.match(/(\d+)\/(\d+)/);
+  const okCount = m ? parseInt(m[1]) : 0;
+  const totalCount = m ? parseInt(m[2]) : 0;
+  const rows = lines.filter(l => l.startsWith('keyIdx:')).map(r => {
+    const parts = r.split('|').map(s => s.trim());
+    return {
+      keyIdx: parts[0]?.replace(/^keyIdx:\s*/, '') || '',
+      ip: parts[1] || '',
+      remark: parts[2] || '',
+      status: parts[3] || '',
+    };
+  });
+  return { summaryLine, okCount, totalCount, rows };
+}
+
+// ─── Modal forms ───
+export function AddPanelModal({ onClose, onSubmit }) {
+  const [name, setName] = React.useState('');
+  const [url, setUrl] = React.useState('');
+  const [token, setToken] = React.useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name || !url || !token) return;
+    onSubmit({ name, url, token });
+  };
+
+  return (
+    <Modal title="➕ Добавить панель" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="modal-form">
+        <div className="form-group">
+          <label>Название</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Hip Warsaw" required autoFocus />
+        </div>
+        <div className="form-group">
+          <label>URL</label>
+          <input type="text" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://203.0.113.4:2053/..." required />
+        </div>
+        <div className="form-group">
+          <label>Token</label>
+          <input type="text" value={token} onChange={e => setToken(e.target.value)} placeholder="Bearer token" required />
+        </div>
+        <div className="modal-actions">
+          <button type="submit" className="btn btn-primary">➕ Добавить</button>
+          <button type="button" className="btn" onClick={onClose}>Отмена</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+export function AddClientModal({ onClose, onSubmit, inbounds }) {
+  const [email, setEmail] = React.useState('');
+  const [inboundId, setInboundId] = React.useState(inbounds[0]?.id || '');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!email || !inboundId) return;
+    onSubmit({ email, inboundId: parseInt(inboundId) });
+  };
+
+  return (
+    <Modal title="👤 Новый клиент" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="modal-form">
+        <div className="form-group">
+          <label>Email клиента</label>
+          <input type="text" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" required autoFocus />
+        </div>
+        <div className="form-group">
+          <label>Инбаунд</label>
+          <select value={inboundId} onChange={e => setInboundId(e.target.value)}>
+            {(inbounds || []).map(ib => (
+              <option key={ib.id} value={ib.id}>{ib.remark} (:{ib.port})</option>
+            ))}
+          </select>
+        </div>
+        <div className="modal-actions">
+          <button type="submit" className="btn btn-primary">➕ Создать</button>
+          <button type="button" className="btn" onClick={onClose}>Отмена</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+export function AddSubscriptionModal({ onClose, onSubmit }) {
+  const [name, setName] = React.useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name) return;
+    onSubmit({ name, keys: [] });
+  };
+
+  return (
+    <Modal title="📡 Новая подписка" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="modal-form">
+        <div className="form-group">
+          <label>Имя клиента</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="ExampleClient" required autoFocus />
+        </div>
+        <p className="form-hint">Будет создан файл config-{name || '{ClientName}'}.txt в папке агрегатора</p>
+        <div className="modal-actions">
+          <button type="submit" className="btn btn-primary">📡 Создать</button>
+          <button type="button" className="btn" onClick={onClose}>Отмена</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}

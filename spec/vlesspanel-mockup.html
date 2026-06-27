@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VlessPanel</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #21262d;
+  --text: #e6edf3;
+  --text-secondary: #8b949e;
+  --accent: #58a6ff;
+  --accent-hover: #79b8ff;
+  --accent-muted: rgba(88,166,255,.15);
+  --success: #3fb950;
+  --danger: #f85149;
+  --danger-faded: rgba(248,81,73,.15);
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: 0 2px 8px rgba(0,0,0,.4);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+input, button, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #30363d; }
+
+/* ─── Layout ─── */
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ─── Header ─── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
+.app-title { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
+.app-title .accent { color: var(--accent); }
+.app-version { font-size: 11px; color: var(--text-secondary); }
+.panel-select { position: relative; }
+.panel-select select {
+  appearance: none; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 6px 30px 6px 10px; color: var(--text);
+  cursor: pointer; font-size: 13px; min-width: 180px;
+}
+.panel-select::after {
+  content: "▾"; position: absolute; right: 10px; top: 50%;
+  transform: translateY(-50%); pointer-events: none; color: var(--text-secondary); font-size: 12px;
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer;
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.btn:hover { background: #1c2333; border-color: var(--accent); }
+.btn-primary {
+  background: var(--accent-muted); border-color: var(--accent); color: var(--accent);
+}
+.btn-primary:hover { background: rgba(88,166,255,.25); }
+.btn-icon {
+  padding: 5px 8px; font-size: 14px; min-width: 30px; justify-content: center;
+}
+.btn-icon:hover { background: #1c2333; }
+.btn-danger { color: var(--danger); }
+.btn-danger:hover { background: var(--danger-faded); border-color: var(--danger); }
+.btn-success { color: var(--success); }
+.btn-success:hover { background: rgba(63,185,80,.15); border-color: var(--success); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-xs { padding: 2px 8px; font-size: 11px; border-radius: 4px; }
+
+/* ─── Main ─── */
+.main {
+  display: grid; grid-template-columns: 42% 58%; flex: 1; overflow: hidden;
+}
+.panel-column {
+  display: flex; flex-direction: column; overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+.panel-column:last-child { border-right: none; }
+.column-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; background: var(--bg);
+}
+.column-header h2 { font-size: 14px; font-weight: 600; }
+.column-body { flex: 1; overflow-y: auto; padding: 8px 12px; }
+.column-footer {
+  padding: 10px 16px; border-top: 1px solid var(--border);
+  flex-shrink: 0; background: var(--bg);
+}
+
+/* ─── Search ─── */
+.search-wrap { position: relative; margin-bottom: 8px; }
+.search-wrap input {
+  width: 100%; padding: 7px 12px 7px 32px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 13px; outline: none; transition: border-color .15s;
+}
+.search-wrap input:focus { border-color: var(--accent); }
+.search-wrap input::placeholder { color: var(--text-secondary); }
+.search-icon {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--text-secondary); font-size: 13px; pointer-events: none;
+}
+
+/* ─── Client Card ─── */
+.client-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px; margin-bottom: 6px;
+  cursor: pointer; transition: border-color .15s, background .15s;
+}
+.client-card:hover { border-color: #30363d; }
+.client-card.selected { border-color: var(--accent); background: rgba(88,166,255,.08); }
+.client-card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.client-name { font-weight: 600; font-size: 13px; }
+.client-inbounds { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
+.client-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* ─── Key Chips ─── */
+.keys-dropdown {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+  display: none; animation: slideDown .2s ease;
+}
+.client-card.selected .keys-dropdown,
+.keys-dropdown.open { display: block; }
+.keys-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.key-chip {
+  display: inline-flex; align-items: center; padding: 3px 10px;
+  background: rgba(88,166,255,.12); border: 1px solid rgba(88,166,255,.25);
+  border-radius: 12px; font-size: 11px; color: var(--accent); cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.key-chip:hover { background: rgba(88,166,255,.25); border-color: var(--accent); }
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 200px; }
+}
+
+/* ─── Subscription Accordion ─── */
+.sub-item {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 6px; overflow: hidden;
+  transition: border-color .15s;
+}
+.sub-item:hover { border-color: #30363d; }
+.sub-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; cursor: pointer; user-select: none;
+  transition: background .15s;
+}
+.sub-header:hover { background: rgba(255,255,255,.02); }
+.sub-title { font-weight: 600; font-size: 13px; }
+.sub-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.sub-arrow {
+  font-size: 10px; color: var(--text-secondary); margin-right: 8px;
+  transition: transform .2s; display: inline-block;
+}
+.sub-item.open .sub-arrow { transform: rotate(90deg); }
+.sub-body {
+  max-height: 0; overflow: hidden; transition: max-height .3s ease, padding .3s ease;
+  padding: 0 12px;
+}
+.sub-item.open .sub-body {
+  max-height: 1200px; padding: 0 12px 10px;
+}
+.sub-key-row {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+}
+.sub-key-row .mono {
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 11px; color: var(--text-secondary); background: var(--bg);
+  padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border);
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sub-key-row .copy-small {
+  cursor: pointer; color: var(--text-secondary); padding: 2px 4px;
+  transition: color .15s; font-size: 13px;
+}
+.sub-key-row .copy-small:hover { color: var(--accent); }
+.sub-key-del {
+  cursor: pointer; color: var(--text-secondary); padding: 2px 4px;
+  transition: color .15s; font-size: 13px;
+}
+.sub-key-del:hover { color: var(--danger); }
+
+/* Add key form */
+.sub-add-key-wrap { margin-top: 8px; }
+.sub-add-key-form-inner {
+  display: flex; gap: 6px; margin-top: 6px; align-items: center;
+}
+.sub-add-key-input {
+  flex: 1; padding: 6px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  font-size: 12px; outline: none; transition: border-color .15s;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+.sub-add-key-input:focus { border-color: var(--accent); }
+.sub-add-key-input::placeholder {
+  font-family: var(--font); color: var(--text-secondary); font-size: 12px;
+}
+
+/* ─── Test Section ─── */
+.test-section { margin-top: 8px; }
+.test-results {
+  margin-top: 6px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); overflow: hidden;
+}
+.test-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.test-table th {
+  background: #0d1117; padding: 6px 10px; text-align: left;
+  font-weight: 500; color: var(--text-secondary); border-bottom: 1px solid var(--border);
+  font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+}
+.test-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); }
+.test-table tr:last-child td { border-bottom: none; }
+.test-table .ok { color: var(--success); font-weight: 600; }
+.test-table .failed { color: var(--danger); font-weight: 600; }
+.test-table tr:hover td { background: rgba(255,255,255,.02); }
+
+/* ─── Toast ─── */
+.toast-container {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 9999; display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none;
+}
+.toast {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 20px; font-size: 13px;
+  box-shadow: var(--shadow); pointer-events: auto;
+  animation: toastIn .3s ease forwards;
+  max-width: 480px; text-align: center; border-left: 3px solid var(--accent);
+}
+.toast.out { animation: toastOut .3s ease forwards; }
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(16px); }
+}
+
+/* ─── Tag/badge ─── */
+.badge {
+  display: inline-block; padding: 1px 7px; border-radius: 10px;
+  font-size: 10px; font-weight: 600; background: rgba(139,148,158,.15);
+  color: var(--text-secondary);
+}
+.badge-panel { background: var(--accent-muted); color: var(--accent); }
+
+/* ─── Empty state ─── */
+.empty-state {
+  text-align: center; padding: 30px 20px; color: var(--text-secondary);
+}
+.empty-state .icon { font-size: 28px; margin-bottom: 8px; opacity: .5; }
+.empty-state p { font-size: 13px; }
+
+/* ─── Responsive ─── */
+@media (max-width: 800px) {
+  .main { grid-template-columns: 1fr; }
+  .panel-column { border-right: none; border-bottom: 1px solid var(--border); }
+  .header { flex-wrap: wrap; gap: 6px; }
+  .header-left { width: 100%; }
+  .panel-select select { min-width: 140px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <div class="panel-select">
+        <select id="panelSelect"></select>
+      </div>
+      <button class="btn btn-primary btn-sm" id="addPanelBtn">+ Панель</button>
+    </div>
+    <div class="header-right">
+      <span class="app-title"><span class="accent">Vless</span>Panel</span>
+      <span class="app-version">v1.4.2</span>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Left: Clients -->
+    <div class="panel-column">
+      <div class="column-header">
+        <h2>📋 Клиенты</h2>
+        <span class="badge" id="clientCount">0</span>
+      </div>
+      <div class="column-body">
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="clientSearch" placeholder="Поиск клиентов..." autocomplete="off">
+        </div>
+        <div id="clientList"></div>
+      </div>
+      <div class="column-footer">
+        <button class="btn btn-primary" id="addClientBtn" style="width:100%;">+ Новый клиент</button>
+      </div>
+    </div>
+
+    <!-- Right: Subscriptions -->
+    <div class="panel-column">
+      <div class="column-header">
+        <h2>📡 Подписки</h2>
+        <span class="badge" id="subCount">0</span>
+      </div>
+      <div class="column-body" id="subListWrap">
+        <div id="subList"></div>
+      </div>
+      <div class="column-footer">
+        <button class="btn btn-primary" id="addSubBtn" style="width:100%;">+ Новая подписка для клиента</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// DEMO DATA
+// ═══════════════════════════════════════════════════════════════
+
+const panels = [
+  { id: 'pan1', name: 'Hip Warsaw', desc: 'PL · Warsaw · 10.0.0.1' },
+  { id: 'pan2', name: 'firstVDS Russia', desc: 'RU · Moscow · 10.0.0.2' },
+  { id: 'pan3', name: 'fastVPS Estonia', desc: 'EE · Tallinn · 10.0.0.3' },
+];
+
+const allClients = {
+  pan1: [
+    { id: 'c1', name: 'ExampleClient', inbounds: ['perMonth', 'friends'], keys: [
+      { label: 'perMonth-ExampleClient vless reality tcp', link: 'vless://ekaterina1@203.0.113.4:443?encryption=none&security=reality&pbk=key1_pl&fp=chrome&sid=sid1&spx=%2F&type=tcp&flow=xtls-rprx-vision#perMonth-ExampleClient' },
+      { label: 'friends-ExampleClient vless reality tcp', link: 'vless://ekaterina1@203.0.113.4:8443?encryption=none&security=reality&pbk=key2_pl&fp=chrome&sid=sid2&spx=%2F&type=tcp&flow=xtls-rprx-vision#friends-ExampleClient' }
+    ]},
+    { id: 'c2', name: 'ExampleClient4', inbounds: ['perMonth'], keys: [
+      { label: 'perMonth-ExampleClient4 vless reality tcp', link: 'vless://sergey1@203.0.113.4:443?encryption=none&security=reality&pbk=key1_pl&fp=chrome&sid=sid3&spx=%2F&type=tcp&flow=xtls-rprx-vision#perMonth-ExampleClient4' }
+    ]},
+    { id: 'c3', name: 'ExampleClient6', inbounds: ['friends'], keys: [
+      { label: 'friends-ExampleClient6 vless reality tcp', link: 'vless://olesya1@203.0.113.4:8443?encryption=none&security=reality&pbk=key2_pl&fp=chrome&sid=sid4&spx=%2F&type=tcp&flow=xtls-rprx-vision#friends-ExampleClient6' }
+    ]},
+  ],
+  pan2: [
+    { id: 'c5', name: 'ExampleClient', inbounds: ['perMonth'], keys: [
+      { label: 'perMonth-ExampleClient vless reality tcp', link: 'vless://ekaterina2@203.0.113.5:443?encryption=none&security=reality&pbk=key1_ru&fp=chrome&sid=sid1&spx=%2F&type=tcp&flow=xtls-rprx-vision#perMonth-ExampleClient' }
+    ]},
+    { id: 'c6', name: 'ExampleClient4', inbounds: ['perMonth'], keys: [
+      { label: 'perMonth-ExampleClient4 vless reality tcp', link: 'vless://sergey2@203.0.113.5:443?encryption=none&security=reality&pbk=key1_ru&fp=chrome&sid=sid2&spx=%2F&type=tcp&flow=xtls-rprx-vision#perMonth-ExampleClient4' }
+    ]},
+    { id: 'c7', name: 'ExampleClient5', inbounds: ['perMonth', 'backup'], keys: [
+      { label: 'perMonth-ExampleClient5 vless reality tcp', link: 'vless://alexandr2@203.0.113.5:443?encryption=none&security=reality&pbk=key1_ru&fp=chrome&sid=sid3&spx=%2F&type=tcp&flow=xtls-rprx-vision#perMonth-ExampleClient5' },
+      { label: 'backup-ExampleClient5 vmess tcp', link: 'vmess://eyJhZGQiOiIxMzguMTI0Ljg1LjQwIiwicG9ydCI6IjQ0MyIsInBzIjoiYmFja3VwLdCQ0LvQtdC60YHQsNC90LTRgCIsImlkIjoiZGVtby11dWlkLWJhY2t1cCIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0IjoidGNwIiwidHlwZSI6Im5vbmUiLCJ0bHMiOiIiLCJ2IjoiMiJ9' }
+    ]},
+  ],
+  pan3: [
+    { id: 'c9', name: 'ExampleClient', inbounds: ['stockholm'], keys: [
+      { label: 'stockholm-ExampleClient vless tls tcp', link: 'vless://ekaterina3@example.com:2053?encryption=none&security=tls&type=tcp#stockholm-ExampleClient' }
+    ]},
+    { id: 'c10', name: 'ExampleClient6', inbounds: ['stockholm', 'perMonth'], keys: [
+      { label: 'stockholm-ExampleClient6 vless tls tcp', link: 'vless://olesya3@example.com:2053?encryption=none&security=tls&type=tcp#stockholm-ExampleClient6' },
+      { label: 'perMonth-ExampleClient6 vless reality tcp', link: 'vless://olesya3@example.com:443?encryption=none&security=reality&pbk=key1_ee&fp=chrome&sid=sid1&spx=%2F&type=tcp&flow=xtls-rprx-vision#perMonth-ExampleClient6' }
+    ]},
+  ],
+};
+
+const subscriptions = [
+  {
+    id: 'ekaterina',
+    name: 'ExampleClient',
+    link: 'https://example.com/sub/ExampleClient',
+    keys: [
+      { id: 'k-101', link: 'vless://client1@203.0.113.5:443?encryption=none&security=reality&pbk=key1&fp=chrome&sid=sid1&spx=%2F&type=tcp&flow=xtls-rprx-vision#perMonth-ExampleClient' },
+      { id: 'k-102', link: 'vless://client1@203.0.113.4:443?encryption=none&security=reality&pbk=key2&fp=chrome&sid=sid2&spx=%2F&type=tcp&flow=xtls-rprx-vision#friends-ExampleClient' }
+    ],
+    testResults: 'vlesssubtest results: 2/2 OK\n\nkeyIdx: 0 | 203.0.113.5 | perMonth-ExampleClient | OK\nkeyIdx: 1 | 203.0.113.4 | friends-ExampleClient | OK'
+  },
+  {
+    id: 'sergey',
+    name: 'ExampleClient4',
+    link: 'https://example.com/sub/Sergey',
+    keys: [
+      { id: 'k-103', link: 'vless://client2@203.0.113.5:443?encryption=none&security=reality&pbk=key1&fp=chrome&sid=sid1&spx=%2F&type=tcp&flow=xtls-rprx-vision#perMonth-ExampleClient4' }
+    ],
+    testResults: 'vlesssubtest results: 1/1 OK\n\nkeyIdx: 0 | 203.0.113.5 | perMonth-ExampleClient4 | OK'
+  },
+  {
+    id: 'olesya',
+    name: 'ExampleClient6',
+    link: 'https://example.com/sub/Olesya',
+    keys: [
+      { id: 'k-104', link: 'vless://client3@203.0.113.4:443?encryption=none&security=reality&pbk=key2&fp=chrome&sid=sid3&spx=%2F&type=tcp&flow=xtls-rprx-vision#friends-ExampleClient6' },
+      { id: 'k-105', link: 'vless://client3@203.0.113.5:443?encryption=none&security=reality&pbk=key1&fp=chrome&sid=sid4&spx=%2F&type=tcp&flow=xtls-rprx-vision#perMonth-ExampleClient6' },
+      { id: 'k-106', link: 'vless://client3@203.0.113.9:2053?encryption=none&security=tls&type=tcp#stockholm-ExampleClient6' }
+    ],
+    testResults: 'vlesssubtest results: 2/3 OK\n\nkeyIdx: 0 | 203.0.113.4 | friends-ExampleClient6 | OK\nkeyIdx: 1 | 203.0.113.5 | perMonth-ExampleClient6 | OK\nkeyIdx: 2 | 203.0.113.9 | stockholm-ExampleClient6 | FAILED, причина `TIMEOUT`'
+  }
+];
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+
+let currentPanel = 'pan1';
+let selectedClientId = null;
+let _keyIdCounter = 106;
+
+function generateKeyId() {
+  return 'k-' + (++_keyIdCounter);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DOM refs
+// ═══════════════════════════════════════════════════════════════
+
+const panelSelect = document.getElementById('panelSelect');
+const clientListEl = document.getElementById('clientList');
+const clientSearch = document.getElementById('clientSearch');
+const clientCount = document.getElementById('clientCount');
+const subListEl = document.getElementById('subList');
+const subCount = document.getElementById('subCount');
+const toastContainer = document.getElementById('toastContainer');
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════
+
+function renderPanelSelect() {
+  panelSelect.innerHTML = panels.map(p =>
+    `<option value="${p.id}" ${p.id === currentPanel ? 'selected' : ''}>${p.name} — ${p.desc}</option>`
+  ).join('');
+}
+
+function getCurrentClients() {
+  return allClients[currentPanel] || [];
+}
+
+function renderClients(query = '') {
+  const clients = getCurrentClients().filter(c => {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return c.name.toLowerCase().includes(q) ||
+           c.inbounds.some(i => i.toLowerCase().includes(q));
+  });
+
+  clientCount.textContent = clients.length;
+
+  if (clients.length === 0) {
+    clientListEl.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>Клиенты не найдены</p></div>`;
+    return;
+  }
+
+  clientListEl.innerHTML = clients.map(c => {
+    const isSelected = selectedClientId === c.id;
+    return `
+      <div class="client-card ${isSelected ? 'selected' : ''}" data-client-id="${c.id}">
+        <div class="client-card-top">
+          <div>
+            <div class="client-name">${escapeHtml(c.name)}</div>
+            <div class="client-inbounds">(${c.inbounds.join(', ')})</div>
+          </div>
+          <div class="client-actions">
+            <button class="btn btn-primary btn-xs add-key-btn" data-client-id="${c.id}">+ Ключ</button>
+            <button class="btn btn-xs btn-icon key-toggle-btn" data-client-id="${c.id}" title="Показать VLESS-ключи">🔑</button>
+          </div>
+        </div>
+        <div class="keys-dropdown ${isSelected ? 'open' : ''}">
+          <div class="keys-list">
+            ${c.keys.map(k =>
+              `<span class="key-chip" data-key-label="${escapeHtml(k.label)}" data-key-link="${escapeHtml(k.link)}">${escapeHtml(k.label)}</span>`
+            ).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function parseTestResults(str) {
+  const lines = str.split('\n').filter(l => l.trim());
+  // First line: vlesssubtest results: X/Y OK  or  vlesssubtest results: X/Y FAILED
+  const summaryLine = lines[0] || '';
+  const summaryMatch = summaryLine.match(/(\d+)\/(\d+)/);
+  const okCount = summaryMatch ? parseInt(summaryMatch[1]) : 0;
+  const totalCount = summaryMatch ? parseInt(summaryMatch[2]) : 0;
+  // Remaining lines: keyIdx: N | IP | remark | status
+  const rows = lines.slice(1).filter(l => l.startsWith('keyIdx:'));
+  return { summaryLine, okCount, totalCount, rows };
+}
+
+function renderTestRows(rows) {
+  return rows.map(r => {
+    const parts = r.split('|').map(s => s.trim());
+    const keyIdx = parts[0].replace(/^keyIdx:\s*/, '');
+    const ip = parts[1] || '';
+    const remark = parts[2] || '';
+    const status = parts[3] || '';
+    const ok = status === 'OK';
+    return `
+      <tr>
+        <td>${escapeHtml(keyIdx)}</td>
+        <td>${escapeHtml(ip)}</td>
+        <td>${escapeHtml(remark)}</td>
+        <td class="${ok ? 'ok' : 'failed'}">${escapeHtml(ok ? 'OK' : 'FAILED')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderSubscriptionHtml(sub) {
+  const subId = sub.id;
+  const parsed = parseTestResults(sub.testResults);
+  return `
+      <div class="sub-item" data-sub-id="${subId}">
+        <div class="sub-header">
+          <div>
+            <span class="sub-arrow">▶</span>
+            <span class="sub-title">${escapeHtml(sub.name)}</span>
+            <span class="badge" style="margin-left:6px;">${parsed.okCount}/${parsed.totalCount} ✅</span>
+          </div>
+          <div class="sub-actions">
+            <button class="btn btn-xs btn-icon copy-sub-btn" title="Копировать ссылку">📋</button>
+            <button class="btn btn-xs btn-icon refresh-sub-btn" title="Обновить">🔄</button>
+            <button class="btn btn-xs btn-icon btn-danger delete-sub-btn" title="Удалить">🗑</button>
+          </div>
+        </div>
+        <div class="sub-body">
+          ${sub.keys.map(k =>
+            `<div class="sub-key-row">
+              <span class="mono" title="${escapeHtml(k.link)}">${escapeHtml(k.link)}</span>
+              <span class="copy-small copy-vless-btn" data-link="${escapeHtml(k.link)}">📋</span>
+              <span class="sub-key-del" data-key-id="${k.id}" data-sub-id="${subId}" title="Удалить ключ">🗑</span>
+            </div>`
+          ).join('')}
+          <div class="sub-add-key-wrap">
+            <button class="btn btn-sm btn-primary sub-add-key-btn" data-sub-id="${subId}">➕ Добавить ключ</button>
+            <div class="sub-add-key-form" style="display:none;" data-sub-id="${subId}">
+              <div class="sub-add-key-form-inner">
+                <input type="text" class="sub-add-key-input" data-sub-id="${subId}" placeholder="Вставьте vless:// или vmess:// ссылку..." autocomplete="off">
+                <button class="btn btn-sm btn-success sub-add-key-confirm" data-sub-id="${subId}">➕ Добавить</button>
+                <button class="btn btn-sm sub-add-key-cancel" data-sub-id="${subId}">Отмена</button>
+              </div>
+            </div>
+          </div>
+          <div class="test-section">
+            <button class="btn btn-sm btn-success test-btn" data-sub-id="${subId}">▶ Тест VlessSubTest</button>
+            <div class="test-results">
+              <pre style="font-size:12px;color:var(--text-secondary);margin:8px;white-space:pre-wrap;">${escapeHtml(sub.testResults)}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+}
+
+function renderSubscriptions() {
+  subCount.textContent = subscriptions.length;
+
+  if (subscriptions.length === 0) {
+    subListEl.innerHTML = `<div class="empty-state"><div class="icon">📡</div><p>Нет подписок</p></div>`;
+    return;
+  }
+
+  subListEl.innerHTML = subscriptions.map(sub => renderSubscriptionHtml(sub)).join('');
+}
+
+function renderSingleSubscription(subId) {
+  const sub = subscriptions.find(s => s.id === subId);
+  if (!sub) return;
+  const html = renderSubscriptionHtml(sub);
+  const existing = document.querySelector(`.sub-item[data-sub-id="${subId}"]`);
+  if (existing) {
+    const wasOpen = existing.classList.contains('open');
+    existing.outerHTML = html;
+    const newEl = document.querySelector(`.sub-item[data-sub-id="${subId}"]`);
+    if (newEl && wasOpen) newEl.classList.add('open');
+  }
+}
+
+function addKeyToSubscription(subId, vlessLink) {
+  const sub = subscriptions.find(s => s.id === subId);
+  if (!sub) return false;
+  sub.keys.push({ id: generateKeyId(), link: vlessLink });
+  renderSingleSubscription(subId);
+  return true;
+}
+
+function removeKeyFromSubscription(subId, keyId) {
+  const sub = subscriptions.find(s => s.id === subId);
+  if (!sub) return false;
+  sub.keys = sub.keys.filter(k => k.id !== keyId);
+  renderSingleSubscription(subId);
+  return true;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════
+
+function showToast(message, duration = 2500) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('out');
+    toast.addEventListener('animationend', () => toast.remove());
+  }, duration);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENTS (delegation-based)
+// ═══════════════════════════════════════════════════════════════
+
+// Panel selector
+panelSelect.addEventListener('change', () => {
+  currentPanel = panelSelect.value;
+  selectedClientId = null;
+  renderClients(clientSearch.value);
+});
+
+// +Панель
+document.getElementById('addPanelBtn').addEventListener('click', () => {
+  showToast('📡 Диалог добавления панели (демо)');
+});
+
+// Client search
+clientSearch.addEventListener('input', () => {
+  renderClients(clientSearch.value);
+});
+
+// Client list delegation (cards, key toggle, key chips, add key)
+clientListEl.addEventListener('click', (e) => {
+  const card = e.target.closest('.client-card');
+  if (!card) return;
+
+  // Key toggle button
+  if (e.target.closest('.key-toggle-btn')) {
+    const cid = e.target.closest('.key-toggle-btn').dataset.clientId;
+    selectedClientId = selectedClientId === cid ? null : cid;
+    renderClients(clientSearch.value);
+    return;
+  }
+
+  // Add key button
+  if (e.target.closest('.add-key-btn')) {
+    const cid = e.target.closest('.add-key-btn').dataset.clientId;
+    const client = getCurrentClients().find(c => c.id === cid);
+    if (client) showToast(`🔑 Создание ключа для ${client.name} (демо)`);
+    return;
+  }
+
+  // Key chip
+  if (e.target.closest('.key-chip')) {
+    const chip = e.target.closest('.key-chip');
+    const label = chip.dataset.keyLabel;
+    const link = chip.dataset.keyLink;
+    navigator.clipboard.writeText(link).catch(() => {});
+    showToast(`🔑 Ключ «${label}» скопирован в буфер`);
+    return;
+  }
+
+  // Select card
+  const cid = card.dataset.clientId;
+  selectedClientId = selectedClientId === cid ? null : cid;
+  renderClients(clientSearch.value);
+});
+
+// +Новый клиент
+document.getElementById('addClientBtn').addEventListener('click', () => {
+  showToast('👤 Диалог добавления нового клиента (демо)');
+});
+
+// Subscriptions delegation
+subListEl.addEventListener('click', (e) => {
+  const subItem = e.target.closest('.sub-item');
+  if (!subItem) return;
+
+  const subId = subItem.dataset.subId;
+  const sub = subscriptions.find(s => s.id === subId);
+  if (!sub) return;
+
+  // Copy subscription link
+  if (e.target.closest('.copy-sub-btn')) {
+    navigator.clipboard.writeText(sub.link).catch(() => {});
+    showToast(`📋 Ссылка подписки скопирована: ${sub.link.substring(0, 40)}…`);
+    return;
+  }
+
+  // Refresh subscription
+  if (e.target.closest('.refresh-sub-btn')) {
+    showToast(`🔄 Подписка «${sub.name}» обновлена (демо)`);
+    return;
+  }
+
+  // Delete subscription
+  if (e.target.closest('.delete-sub-btn')) {
+    showToast(`🗑 Подписка «${sub.name}» удалена (демо)`);
+    return;
+  }
+
+  // Copy individual VLESS from subscription
+  if (e.target.closest('.copy-vless-btn')) {
+    const link = e.target.closest('.copy-vless-btn').dataset.link;
+    navigator.clipboard.writeText(link).catch(() => {});
+    showToast(`🔑 VLESS-ключ скопирован в буфер`);
+    return;
+  }
+
+  // Delete key from subscription
+  if (e.target.closest('.sub-key-del')) {
+    const delBtn = e.target.closest('.sub-key-del');
+    const keyId = delBtn.dataset.keyId;
+    const sid = delBtn.dataset.subId;
+    const keySub = subscriptions.find(s => s.id === sid);
+    if (keySub) {
+      removeKeyFromSubscription(sid, keyId);
+      showToast(`🗑 Ключ удалён из подписки «${keySub.name}»`);
+    }
+    return;
+  }
+
+  // Toggle add-key form
+  if (e.target.closest('.sub-add-key-btn')) {
+    const btn = e.target.closest('.sub-add-key-btn');
+    const sid = btn.dataset.subId;
+    const form = document.querySelector(`.sub-add-key-form[data-sub-id="${sid}"]`);
+    if (form) {
+      form.style.display = 'block';
+      const input = form.querySelector('.sub-add-key-input');
+      if (input) setTimeout(() => input.focus(), 50);
+    }
+    btn.style.display = 'none';
+    return;
+  }
+
+  // Confirm add key
+  if (e.target.closest('.sub-add-key-confirm')) {
+    const btn = e.target.closest('.sub-add-key-confirm');
+    const sid = btn.dataset.subId;
+    const form = document.querySelector(`.sub-add-key-form[data-sub-id="${sid}"]`);
+    if (!form) return;
+    const input = form.querySelector('.sub-add-key-input');
+    if (!input) return;
+    const val = input.value.trim();
+    if (!val.startsWith('vless://') && !val.startsWith('vmess://')) {
+      showToast('⚠️ Ссылка должна начинаться с vless:// или vmess://');
+      return;
+    }
+    addKeyToSubscription(sid, val);
+    showToast('✅ Ключ добавлен');
+    return;
+  }
+
+  // Cancel add key
+  if (e.target.closest('.sub-add-key-cancel')) {
+    const btn = e.target.closest('.sub-add-key-cancel');
+    const sid = btn.dataset.subId;
+    const form = document.querySelector(`.sub-add-key-form[data-sub-id="${sid}"]`);
+    if (form) form.style.display = 'none';
+    const addBtn = document.querySelector(`.sub-add-key-btn[data-sub-id="${sid}"]`);
+    if (addBtn) addBtn.style.display = '';
+    return;
+  }
+
+  // Test button
+  if (e.target.closest('.test-btn')) {
+    showToast(`🧪 Тест VlessSubTest для «${sub.name}» запущен (демо)`);
+    return;
+  }
+
+  // Toggle accordion
+  subItem.classList.toggle('open');
+});
+
+// Enter key in add-key input
+subListEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.closest('.sub-add-key-input')) {
+    e.preventDefault();
+    const input = e.target.closest('.sub-add-key-input');
+    const sid = input.dataset.subId;
+    const form = document.querySelector(`.sub-add-key-form[data-sub-id="${sid}"]`);
+    if (!form) return;
+    const val = input.value.trim();
+    if (!val.startsWith('vless://') && !val.startsWith('vmess://')) {
+      showToast('⚠️ Ссылка должна начинаться с vless:// или vmess://');
+      return;
+    }
+    addKeyToSubscription(sid, val);
+    showToast('✅ Ключ добавлен');
+  }
+});
+
+// +Новая подписка для клиента
+document.getElementById('addSubBtn').addEventListener('click', () => {
+  showToast('📡 Диалог создания новой подписки (демо)');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+
+function init() {
+  renderPanelSelect();
+  renderClients();
+  renderSubscriptions();
+  // Open first subscription by default
+  const firstSub = document.querySelector('.sub-item');
+  if (firstSub) firstSub.classList.add('open');
+}
+
+init();
+</script>
+</body>
+</html>

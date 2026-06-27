@@ -1,0 +1,124 @@
+package main
+
+// Panel represents a 3X-UI panel configuration
+type Panel struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	URL   string `json:"url"`
+	Token string `json:"token,omitempty"`
+}
+
+// Inbound represents a 3X-UI inbound
+type Inbound struct {
+	ID      int    `json:"id"`
+	Remark  string `json:"remark"`
+	Port    int    `json:"port"`
+	Protocol string `json:"protocol"`
+	Settings string `json:"settings"`
+}
+
+// Client represents a client on a 3X-UI panel
+type Client struct {
+	ID         string   `json:"id"`
+	Email      string   `json:"email"`
+	Enable     bool     `json:"enable"`
+	InboundIDs []int    `json:"inboundIds"`
+	Inbounds   []string `json:"inbounds"`
+	Keys       []VLESSKey `json:"keys,omitempty"`
+}
+
+// VLESSKey represents a VLESS connection key
+type VLESSKey struct {
+	Label    string `json:"label"`
+	Protocol string `json:"protocol"`
+	Link     string `json:"link"`
+	Inbound  string `json:"inbound"`
+	Server   string `json:"server"`
+	Port     int    `json:"port"`
+	Security string `json:"security"`
+	Transport string `json:"transport"`
+}
+
+// Subscription represents a named collection of VLESS keys
+type Subscription struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Keys        []SubKey  `json:"keys"`
+	Link        string    `json:"link,omitempty"`
+	TestResults string    `json:"testResults,omitempty"`
+}
+
+// SubKey is a single key within a subscription
+type SubKey struct {
+	ID   string `json:"id"`
+	Link string `json:"link"`
+}
+
+// CreatePanelRequest is the request body for adding a panel
+type CreatePanelRequest struct {
+	Name  string `json:"name"`
+	URL   string `json:"url"`
+	Token string `json:"token"`
+}
+
+// CreateClientRequest is the request body for creating a client
+type CreateClientRequest struct {
+	Email     string `json:"email"`
+	InboundID int    `json:"inboundId"`
+}
+
+// CreateSubscriptionRequest is the request body for creating a subscription
+type CreateSubscriptionRequest struct {
+	Name string   `json:"name"`
+	Keys []SubKey `json:"keys"`
+}
+
+// UpdateSubscriptionRequest is the request body for updating a subscription
+type UpdateSubscriptionRequest struct {
+	Name string   `json:"name,omitempty"`
+	Keys []SubKey `json:"keys,omitempty"`
+}
+
+// TestResult represents a single test result row
+type TestResult struct {
+	KeyIdx int    `json:"keyIdx"`
+	IP     string `json:"ip"`
+	Remark string `json:"remark"`
+	Status string `json:"status"`
+}
+
+// XUIClientStats represents a client from 3X-UI API
+type XUIClientStats struct {
+	ID      int    `json:"id"`
+	Email   string `json:"email"`
+	Enable  bool   `json:"enable"`
+	流量上行 string `json:"up"`
+	流量下行 string `json:"down"`
+	总流量  string `json:"total"`
+	过期时间 string `json:"expiryTime"`
+}
+
+// XUIInbound represents an inbound from 3X-UI API
+type XUIInbound struct {
+	ID          int              `json:"id"`
+	Remark      string           `json:"remark"`
+	Port        int              `json:"port"`
+	Protocol    string           `json:"protocol"`
+	Settings    string           `json:"settings"`
+	ClientStats []XUIClientStats `json:"clientStats"`
+}
+
+// XUIResponse is a generic 3X-UI API response
+type XUIResponse struct {
+	Success bool        `json:"success"`
+	Msg     string      `json:"msg"`
+	Obj     interface{} `json:"obj,omitempty"`
+}
+
+// XUIClientSettings represents the settings JSON for a client
+type XUIClientSettings struct {
+	Email    string `json:"email"`
+	Flow     string `json:"flow,omitempty"`
+	ID       string `json:"id"`
+	Level    int    `json:"level,omitempty"`
+}
