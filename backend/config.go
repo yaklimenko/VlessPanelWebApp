@@ -24,7 +24,7 @@ func LoadConfig() Config {
 
 	aggDir := os.Getenv("VLESSPANEL_AGGREGATOR_DIR")
 	if aggDir == "" {
-		aggDir = "/home/klem/VlessAggregator"
+		aggDir = "/opt/vless-aggregator"
 	}
 
 	panelsFile := os.Getenv("VLESSPANEL_PANELS_FILE")

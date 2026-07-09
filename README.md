@@ -101,9 +101,3 @@ cd /home/klem/VlessPanelApp && VLESSPANEL_STATIC_DIR=frontend/dist ./build/vless
 - **URL:** `https://203.0.113.8:34764/webBasePathPlaceholder1`
 - **Token:** в vault (`3xui-fastvps-Estonia-api-token`)
 
-### Проверка API вручную
-
-```bash
-curl -sk -H "Authorization: Bearer <token>" \
-  "https://203.0.113.8:34764/webBasePathPlaceholder1/panel/api/inbounds/list" | python3 -m json.tool
-```
