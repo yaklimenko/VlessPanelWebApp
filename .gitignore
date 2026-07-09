@@ -11,6 +11,9 @@
 # Local panels config (contains real tokens)
 /panels.json
 
+# Docker runtime data
+/data/
+
 # Test results (generated)
 /api-test-results.txt
 

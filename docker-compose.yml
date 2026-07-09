@@ -1,0 +1,18 @@
+services:
+  vlesspanel:
+    build: .
+    container_name: vlesspanel
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - VLESSPANEL_PORT=8080
+      - VLESSPANEL_AGGREGATOR_DIR=/data/aggregator
+      - VLESSPANEL_PANELS_FILE=/data/panels.json
+      - VLESSPANEL_STATIC_DIR=/app/static
+      # Для тестирования ключей — раскомментируй и прокинуть бинарник:
+      # - VLESSPANEL_VLESSSUBTEST_PATH=/tools/vlesssubtest
+      # volumes дописать:
+      # - /путь/к/vlesssubtest:/tools/vlesssubtest:ro
+    restart: unless-stopped
