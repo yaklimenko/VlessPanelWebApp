@@ -103,7 +103,7 @@ func (api *PanelAPI) ListClients(panel Panel) ([]Client, error) {
 			continue
 		}
 
-		// Parse settings to find client IDs and emails
+			// Parse settings — 3X-UI v3.4.2+ returns settings as JSON object (not string)
 		type ParsedSettings struct {
 			Clients []struct {
 				ID    string `json:"id"`
@@ -113,7 +113,7 @@ func (api *PanelAPI) ListClients(panel Panel) ([]Client, error) {
 		}
 
 		var settings ParsedSettings
-		json.Unmarshal([]byte(inbound.Settings), &settings)
+		json.Unmarshal(inbound.Settings, &settings)
 
 		for _, stat := range inbound.ClientStats {
 			clientID := stat.Email
@@ -157,7 +157,7 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 	var keys []VLESSKey
 
 	for _, inbound := range inbounds {
-		// Parse settings
+		// Parse settings — 3X-UI v3.4.2+ returns settings as JSON object
 		type ParsedSettings struct {
 			Clients []struct {
 				ID    string `json:"id"`
@@ -167,7 +167,7 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 		}
 
 		var settings ParsedSettings
-		if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil {
+		if err := json.Unmarshal(inbound.Settings, &settings); err != nil {
 			continue
 		}
 
@@ -229,13 +229,13 @@ func (api *PanelAPI) CreateClient(panel Panel, inboundID int, email string) erro
 		return fmt.Errorf("inbound %d not found", inboundID)
 	}
 
-	// Parse current settings
+	// Parse current settings — 3X-UI v3.4.2+ returns settings as JSON object
 	type ParsedSettings struct {
 		Clients []map[string]interface{} `json:"clients"`
 	}
 
 	var settings ParsedSettings
-	if err := json.Unmarshal([]byte(targetInbound.Settings), &settings); err != nil {
+	if err := json.Unmarshal(targetInbound.Settings, &settings); err != nil {
 		return fmt.Errorf("parsing inbound settings: %w", err)
 	}
 

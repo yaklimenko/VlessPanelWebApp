@@ -1,5 +1,7 @@
 package main
 
+import "encoding/json"
+
 // Panel represents a 3X-UI panel configuration
 type Panel struct {
 	ID    string `json:"id"`
@@ -87,24 +89,24 @@ type TestResult struct {
 	Status string `json:"status"`
 }
 
-// XUIClientStats represents a client from 3X-UI API
+// XUIClientStats represents a client from 3X-UI API (tested with v3.4.2)
 type XUIClientStats struct {
-	ID      int    `json:"id"`
-	Email   string `json:"email"`
-	Enable  bool   `json:"enable"`
-	流量上行 string `json:"up"`
-	流量下行 string `json:"down"`
-	总流量  string `json:"total"`
-	过期时间 string `json:"expiryTime"`
+	ID         int    `json:"id"`
+	Email      string `json:"email"`
+	Enable     bool   `json:"enable"`
+	Up         int64  `json:"up"`
+	Down       int64  `json:"down"`
+	Total      int64  `json:"total"`
+	ExpiryTime int64  `json:"expiryTime"`
 }
 
-// XUIInbound represents an inbound from 3X-UI API
+// XUIInbound represents an inbound from 3X-UI API (tested with v3.4.2)
 type XUIInbound struct {
 	ID          int              `json:"id"`
 	Remark      string           `json:"remark"`
 	Port        int              `json:"port"`
 	Protocol    string           `json:"protocol"`
-	Settings    string           `json:"settings"`
+	Settings    json.RawMessage  `json:"settings"`
 	ClientStats []XUIClientStats `json:"clientStats"`
 }
 
