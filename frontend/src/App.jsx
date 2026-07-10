@@ -80,6 +80,25 @@ function AppInner() {
       .catch(err => showToast('⚠️ ' + err.message));
   };
 
+  const handleDeletePanel = () => {
+    if (panels.length <= 1) {
+      showToast('⚠️ Нельзя удалить последнюю панель');
+      return;
+    }
+    const panelId = currentPanelId;
+    if (!panelId) return;
+    api.deletePanel(panelId)
+      .then(() => {
+        const remaining = panels.filter(p => p.id !== panelId);
+        setPanels(remaining);
+        if (currentPanelId === panelId && remaining.length > 0) {
+          setCurrentPanelId(remaining[0].id);
+        }
+        showToast('🗑 Панель удалена');
+      })
+      .catch(err => showToast('⚠️ ' + err.message));
+  };
+
   // ─── Client handlers ───
   const handleCreateClient = (data) => {
     if (!currentPanelId) return;
@@ -199,6 +218,7 @@ function AppInner() {
         selectedPanelId={currentPanelId}
         onPanelChange={setCurrentPanelId}
         onAddPanel={() => setShowAddPanel(true)}
+        onDeletePanel={handleDeletePanel}
       />
 
       <div className="main">

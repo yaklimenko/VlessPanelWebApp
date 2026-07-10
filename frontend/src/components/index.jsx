@@ -55,7 +55,7 @@ export function Modal({ title, children, onClose }) {
 }
 
 // ─── Header ───
-export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel }) {
+export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onDeletePanel }) {
   return (
     <header className="header">
       <div className="header-left">
@@ -66,6 +66,8 @@ export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel }) {
             ))}
           </select>
         </div>
+        <div className="header-spacer" />
+        <button className="btn btn-danger btn-sm" onClick={onDeletePanel}>– Панель</button>
         <button className="btn btn-primary btn-sm" onClick={onAddPanel}>+ Панель</button>
       </div>
       <div className="header-right">
