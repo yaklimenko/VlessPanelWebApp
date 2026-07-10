@@ -100,6 +100,24 @@ type XUIClientStats struct {
 	ExpiryTime int64  `json:"expiryTime"`
 }
 
+// XUIClientTraffic represents nested traffic stats in /panel/api/clients/list
+type XUIClientTraffic struct {
+	Up     int64 `json:"up"`
+	Down   int64 `json:"down"`
+	Enable bool  `json:"enable"`
+}
+
+// XUIClient represents a client from /panel/api/clients/list (3X-UI v3.4.2+)
+type XUIClient struct {
+	ID         int              `json:"id"`
+	Email      string           `json:"email"`
+	Enable     bool             `json:"enable"`
+	ExpiryTime int64            `json:"expiryTime"`
+	TotalGB    int64            `json:"totalGB"`
+	InboundIDs []int            `json:"inboundIds"`
+	Traffic    XUIClientTraffic `json:"traffic"`
+}
+
 // XUIInbound represents an inbound from 3X-UI API (tested with v3.4.2)
 type XUIInbound struct {
 	ID          int              `json:"id"`

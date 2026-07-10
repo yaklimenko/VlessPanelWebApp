@@ -97,8 +97,81 @@ func (api *PanelAPI) ListInbounds(panel Panel) ([]XUIInbound, error) {
 	return inbounds, nil
 }
 
-// ListClients extracts all clients from all inbounds
+// ListClientsDirect uses the dedicated /panel/api/clients/list endpoint (3X-UI v3.4.2+)
+func (api *PanelAPI) ListClientsDirect(panel Panel) ([]Client, error) {
+	url := fmt.Sprintf("%s/panel/api/clients/list", strings.TrimRight(panel.URL, "/"))
+
+	resp, err := api.doRequest("GET", url, panel.Token, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listing clients (direct): %w", err)
+	}
+
+	xuiResp, err := api.parseResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	if !xuiResp.Success {
+		return nil, fmt.Errorf("3X-UI error: %s", xuiResp.Msg)
+	}
+
+	objBytes, err := json.Marshal(xuiResp.Obj)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling obj: %w", err)
+	}
+
+	var xuiClients []XUIClient
+	if err := json.Unmarshal(objBytes, &xuiClients); err != nil {
+		log.Printf("ListClientsDirect: failed to unmarshal clients: %v\nObj: %s", err, string(objBytes))
+		return nil, fmt.Errorf("parsing clients: %w", err)
+	}
+
+	// Fetch inbounds to map inbound IDs → remark names
+	inbounds, err := api.ListInbounds(panel)
+	if err != nil {
+		log.Printf("ListClientsDirect: ListInbounds failed, inbound names unavailable: %v", err)
+	}
+	remarkMap := make(map[int]string)
+	for _, ib := range inbounds {
+		remarkMap[ib.ID] = ib.Remark
+	}
+
+	clients := make([]Client, 0, len(xuiClients))
+	for _, xc := range xuiClients {
+		if xc.Email == "" {
+			continue
+		}
+		inboundRemarks := make([]string, 0, len(xc.InboundIDs))
+		for _, id := range xc.InboundIDs {
+			if remark, ok := remarkMap[id]; ok {
+				inboundRemarks = append(inboundRemarks, remark)
+			}
+		}
+		clients = append(clients, Client{
+			ID:         xc.Email,
+			Email:      xc.Email,
+			Enable:     xc.Enable,
+			InboundIDs: xc.InboundIDs,
+			Inbounds:   inboundRemarks,
+			Keys:       []VLESSKey{},
+		})
+	}
+
+	return clients, nil
+}
+
+// ListClients extracts all clients, trying the direct endpoint first with inbounds fallback
 func (api *PanelAPI) ListClients(panel Panel) ([]Client, error) {
+	clients, err := api.ListClientsDirect(panel)
+	if err == nil {
+		return clients, nil
+	}
+	log.Printf("ListClientsDirect failed, falling back to inbounds-based method: %v", err)
+	return api.listClientsFromInbounds(panel)
+}
+
+// listClientsFromInbounds extracts all clients from all inbounds (legacy method)
+func (api *PanelAPI) listClientsFromInbounds(panel Panel) ([]Client, error) {
 	inbounds, err := api.ListInbounds(panel)
 	if err != nil {
 		return nil, err
