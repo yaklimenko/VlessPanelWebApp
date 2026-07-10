@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -51,7 +52,8 @@ func (api *PanelAPI) parseResponse(resp *http.Response) (*XUIResponse, error) {
 
 	var xuiResp XUIResponse
 	if err := json.Unmarshal(data, &xuiResp); err != nil {
-		return nil, fmt.Errorf("parsing response: %s: %w", string(data), err)
+		log.Printf("parseResponse: failed to unmarshal 3X-UI response: %v\nBody: %s", err, string(data))
+		return nil, fmt.Errorf("parsing response: %w", err)
 	}
 
 	return &xuiResp, nil
@@ -83,6 +85,7 @@ func (api *PanelAPI) ListInbounds(panel Panel) ([]XUIInbound, error) {
 
 	var inbounds []XUIInbound
 	if err := json.Unmarshal(objBytes, &inbounds); err != nil {
+		log.Printf("ListInbounds: failed to unmarshal inbounds array: %v\nObj JSON: %s", err, string(objBytes))
 		return nil, fmt.Errorf("parsing inbounds: %w", err)
 	}
 
@@ -113,7 +116,11 @@ func (api *PanelAPI) ListClients(panel Panel) ([]Client, error) {
 		}
 
 		var settings ParsedSettings
-		json.Unmarshal(inbound.Settings, &settings)
+		if err := json.Unmarshal(inbound.Settings, &settings); err != nil {
+			log.Printf("ListClients: failed to unmarshal settings for inbound %d (%s): %v\nSettings: %s",
+				inbound.ID, inbound.Remark, err, string(inbound.Settings))
+			continue
+		}
 
 		for _, stat := range inbound.ClientStats {
 			clientID := stat.Email
@@ -168,6 +175,8 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 
 		var settings ParsedSettings
 		if err := json.Unmarshal(inbound.Settings, &settings); err != nil {
+			log.Printf("GetClientKeys: failed to unmarshal settings for inbound %d (%s) while getting keys for %s: %v\nSettings: %s",
+				inbound.ID, inbound.Remark, email, err, string(inbound.Settings))
 			continue
 		}
 
@@ -236,6 +245,8 @@ func (api *PanelAPI) CreateClient(panel Panel, inboundID int, email string) erro
 
 	var settings ParsedSettings
 	if err := json.Unmarshal(targetInbound.Settings, &settings); err != nil {
+		log.Printf("CreateClient: failed to unmarshal settings for inbound %d (%s): %v\nSettings: %s",
+			targetInbound.ID, targetInbound.Remark, err, string(targetInbound.Settings))
 		return fmt.Errorf("parsing inbound settings: %w", err)
 	}
 
