@@ -50,6 +50,11 @@ func (api *PanelAPI) parseResponse(resp *http.Response) (*XUIResponse, error) {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Printf("3X-UI HTTP %d: %s", resp.StatusCode, string(data))
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(data))
+	}
+
 	var xuiResp XUIResponse
 	if err := json.Unmarshal(data, &xuiResp); err != nil {
 		log.Printf("parseResponse: failed to unmarshal 3X-UI response: %v\nBody: %s", err, string(data))
