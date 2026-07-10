@@ -70,7 +70,7 @@ export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onD
             </select>
           </div>
         )}
-        <button className="btn btn-danger btn-sm" disabled={panels.length <= 1} onClick={onDeletePanel}>– Панель</button>
+        <button className="btn btn-danger btn-sm" disabled={panels.length === 0} onClick={onDeletePanel}>– Панель</button>
         <button className="btn btn-primary btn-sm" onClick={onAddPanel}>+ Панель</button>
       </div>
       <div className="header-right">

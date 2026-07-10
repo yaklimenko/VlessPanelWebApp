@@ -90,10 +90,6 @@ function AppInner() {
   };
 
   const handleDeletePanel = () => {
-    if (panels.length <= 1) {
-      showToast('⚠️ Нельзя удалить последнюю панель');
-      return;
-    }
     const panelId = currentPanelId;
     if (!panelId) return;
     api.deletePanel(panelId)
