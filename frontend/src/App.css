@@ -57,6 +57,9 @@ input, button, select, textarea { font-family: inherit; font-size: inherit; colo
   content: "▾"; position: absolute; right: 10px; top: 50%;
   transform: translateY(-50%); pointer-events: none; color: var(--text-secondary); font-size: 12px;
 }
+.no-panels-text {
+  font-size: 13px; color: var(--text-secondary); padding: 6px 0;
+}
 
 /* ─── Buttons ─── */
 .btn {

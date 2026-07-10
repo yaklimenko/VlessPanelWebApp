@@ -43,6 +43,15 @@ function AppInner() {
       .catch(err => showToast('⚠️ ' + err.message));
   }, []);
 
+  // ─── Sync currentPanelId with panels array ───
+  useEffect(() => {
+    if (panels.length === 0) {
+      setCurrentPanelId(null);
+    } else if (currentPanelId && !panels.some(p => p.id === currentPanelId)) {
+      setCurrentPanelId(panels[0].id);
+    }
+  }, [panels, currentPanelId]);
+
   // ─── Load clients ───
   useEffect(() => {
     if (!currentPanelId) return;

@@ -59,16 +59,17 @@ export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onD
   return (
     <header className="header">
       <div className="header-left">
-        <div className="panel-select">
-          <select value={selectedPanelId || ''} onChange={e => onPanelChange(e.target.value)}>
-            {panels.length === 0 && (
-              <option disabled value="">Нет панелей — добавьте первую</option>
-            )}
-            {panels.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
+        {panels.length === 0 ? (
+          <span className="no-panels-text">Нет панелей — добавьте первую</span>
+        ) : (
+          <div className="panel-select">
+            <select value={selectedPanelId || ''} onChange={e => onPanelChange(e.target.value)}>
+              {panels.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <button className="btn btn-danger btn-sm" disabled={panels.length <= 1} onClick={onDeletePanel}>– Панель</button>
         <button className="btn btn-primary btn-sm" onClick={onAddPanel}>+ Панель</button>
       </div>
