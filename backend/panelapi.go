@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // PanelAPI handles communication with 3X-UI panels
@@ -22,8 +23,20 @@ func NewPanelAPI() *PanelAPI {
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	return &PanelAPI{
-		client: &http.Client{Transport: tr},
+		client: &http.Client{
+			Transport: tr,
+			Timeout:   30 * time.Second,
+		},
 	}
+}
+
+// buildURL constructs the full API URL for a panel endpoint
+func (api *PanelAPI) buildURL(panel Panel, path string) string {
+	base := strings.TrimRight(panel.URL, "/")
+	if panel.WebBasePath != "" {
+		base = strings.TrimRight(base+"/"+strings.Trim(panel.WebBasePath, "/"), "/")
+	}
+	return fmt.Sprintf("%s/%s", base, strings.TrimLeft(path, "/"))
 }
 
 // doRequest performs an HTTP request to a 3X-UI panel
@@ -66,7 +79,7 @@ func (api *PanelAPI) parseResponse(resp *http.Response) (*XUIResponse, error) {
 
 // ListInbounds fetches all inbounds from a panel
 func (api *PanelAPI) ListInbounds(panel Panel) ([]XUIInbound, error) {
-	url := fmt.Sprintf("%s/panel/api/inbounds/list", strings.TrimRight(panel.URL, "/"))
+	url := api.buildURL(panel, "panel/api/inbounds/list")
 
 	resp, err := api.doRequest("GET", url, panel.Token, nil)
 	if err != nil {
@@ -99,7 +112,7 @@ func (api *PanelAPI) ListInbounds(panel Panel) ([]XUIInbound, error) {
 
 // ListClientsDirect uses the dedicated /panel/api/clients/list endpoint (3X-UI v3.4.2+)
 func (api *PanelAPI) ListClientsDirect(panel Panel) ([]Client, error) {
-	url := fmt.Sprintf("%s/panel/api/clients/list", strings.TrimRight(panel.URL, "/"))
+	url := api.buildURL(panel, "panel/api/clients/list")
 
 	resp, err := api.doRequest("GET", url, panel.Token, nil)
 	if err != nil {
@@ -291,63 +304,16 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 	return keys, nil
 }
 
-// CreateClient creates a new client on a panel's inbound
+// CreateClient creates a new client on a panel's inbounds (3X-UI v3.5.0+)
 func (api *PanelAPI) CreateClient(panel Panel, inboundID int, email string) error {
-	url := fmt.Sprintf("%s/panel/api/inbounds/addClient", strings.TrimRight(panel.URL, "/"))
-
-	// Generate a UUID for the client
-	uuid := "00000000-0000-0000-0000-" + strings.ReplaceAll(email, "@", "")
-
-	// First, get the current inbound settings
-	inbounds, err := api.ListInbounds(panel)
-	if err != nil {
-		return fmt.Errorf("getting inbounds: %w", err)
-	}
-
-	var targetInbound *XUIInbound
-	for i, ib := range inbounds {
-		if ib.ID == inboundID {
-			targetInbound = &inbounds[i]
-			break
-		}
-	}
-
-	if targetInbound == nil {
-		return fmt.Errorf("inbound %d not found", inboundID)
-	}
-
-	// Parse current settings — 3X-UI v3.4.2+ returns settings as JSON object
-	type ParsedSettings struct {
-		Clients []map[string]interface{} `json:"clients"`
-	}
-
-	var settings ParsedSettings
-	if err := json.Unmarshal(targetInbound.Settings, &settings); err != nil {
-		log.Printf("CreateClient: failed to unmarshal settings for inbound %d (%s): %v\nSettings: %s",
-			targetInbound.ID, targetInbound.Remark, err, string(targetInbound.Settings))
-		return fmt.Errorf("parsing inbound settings: %w", err)
-	}
-
-	// Create new client
-	newClient := map[string]interface{}{
-		"id":    uuid,
-		"email": email,
-		"flow":  "xtls-rprx-vision",
-	}
-
-	if settings.Clients == nil {
-		settings.Clients = make([]map[string]interface{}, 0)
-	}
-	settings.Clients = append(settings.Clients, newClient)
-
-	updatedSettings, err := json.Marshal(settings)
-	if err != nil {
-		return fmt.Errorf("marshaling updated settings: %w", err)
-	}
+	url := api.buildURL(panel, "panel/api/clients/add")
 
 	payload := map[string]interface{}{
-		"id":       inboundID,
-		"settings": string(updatedSettings),
+		"client": map[string]interface{}{
+			"email":  email,
+			"enable": true,
+		},
+		"inboundIds": []int{inboundID},
 	}
 
 	body, err := json.Marshal(payload)

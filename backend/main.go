@@ -19,7 +19,7 @@ func main() {
 	log.Printf("  Aggregator dir:  %s", config.AggregatorDir)
 	log.Printf("  Panels file:     %s", config.PanelsFilePath)
 	log.Printf("  Static dir:      %s", config.StaticDir)
-	log.Printf("  VlessSubTest:    %s", config.VlessSubTestPath)
+	log.Printf("  VlessSubTest:    %s", config.VlessSubTestDaemonURL)
 	log.Println("========================================")
 
 	// Initialize storage

@@ -1,13 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
-	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -347,7 +349,7 @@ func (h *Handlers) GetSubscriptionRaw(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(content))
 }
 
-// TestSubscription runs VlessSubTest on a subscription
+// TestSubscription runs VlessSubTest daemon on a subscription
 func (h *Handlers) TestSubscription(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -362,50 +364,73 @@ func (h *Handlers) TestSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build the URL parameter for vlesssubtest
-	// Format: url=vless://...|vless://...|vless://...
-	urls := make([]string, 0, len(sub.Keys))
-	for _, k := range sub.Keys {
-		urls = append(urls, k.Link)
-	}
-	urlParam := strings.Join(urls, "|")
+	client := &http.Client{Timeout: 30 * time.Second}
+	daemonURL := strings.TrimRight(h.config.VlessSubTestDaemonURL, "/") + "/test-single"
 
-	cmd := exec.Command(h.config.VlessSubTestPath, "url="+urlParam)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("VlessSubTest error: %v, output: %s", err, string(output))
+	var results []TestSingleResponse
+	okCount := 0
+
+	for i, key := range sub.Keys {
+		reqBody, _ := json.Marshal(TestSingleRequest{
+			Vless:   key.Link,
+			Timeout: 10,
+		})
+
+		resp, err := client.Post(daemonURL, "application/json", bytes.NewReader(reqBody))
+		if err != nil {
+			results = append(results, TestSingleResponse{
+				KeyIdx: i,
+				Status: "ERROR",
+				IP:     err.Error(),
+			})
+			continue
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		var single TestSingleResponse
+		if err := json.Unmarshal(body, &single); err != nil {
+			results = append(results, TestSingleResponse{
+				KeyIdx: i,
+				Status: "ERROR",
+				IP:     "failed to parse response",
+			})
+			continue
+		}
+
+		single.KeyIdx = i
+		if single.Status == "OK" {
+			okCount++
+		}
+		results = append(results, single)
 	}
 
-	result := strings.TrimSpace(string(output))
-	if result == "" {
-		result = "VlessSubTest completed with no output"
-	}
-
-	respondJSON(w, http.StatusOK, map[string]string{
-		"result":   result,
-		"status":   "ok",
-		"original": strings.Join(urls, "\n"),
+	respondJSON(w, http.StatusOK, TestSubscriptionResponse{
+		Total:   len(sub.Keys),
+		OK:      okCount,
+		Results: results,
 	})
 }
 
-// GetVlessSubTestStatus returns the status of VlessSubTest binary
+// GetVlessSubTestStatus returns the status of VlessSubTest daemon
 func (h *Handlers) GetVlessSubTestStatus(w http.ResponseWriter, r *http.Request) {
-	cmd := exec.Command(h.config.VlessSubTestPath, "--help")
-	output, err := cmd.CombinedOutput()
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(strings.TrimRight(h.config.VlessSubTestDaemonURL, "/") + "/test")
 
 	if err != nil {
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"available": false,
-			"path":      h.config.VlessSubTestPath,
+			"daemonURL": h.config.VlessSubTestDaemonURL,
 			"error":     err.Error(),
 		})
 		return
 	}
+	resp.Body.Close()
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"available": true,
-		"path":      h.config.VlessSubTestPath,
-		"help":      strings.TrimSpace(string(output)),
+		"daemonURL": h.config.VlessSubTestDaemonURL,
 	})
 }
 

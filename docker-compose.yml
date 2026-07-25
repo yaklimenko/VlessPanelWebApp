@@ -3,7 +3,7 @@ services:
     build: .
     container_name: vlesspanel
     ports:
-      - "8080:8080"
+      - "9090:8080"
     volumes:
       - ./data:/data
     environment:
@@ -11,8 +11,21 @@ services:
       - VLESSPANEL_AGGREGATOR_DIR=/data/aggregator
       - VLESSPANEL_PANELS_FILE=/data/panels.json
       - VLESSPANEL_STATIC_DIR=/app/static
-      # Для тестирования ключей — раскомментируй и прокинуть бинарник:
-      # - VLESSPANEL_VLESSSUBTEST_PATH=/tools/vlesssubtest
-      # volumes дописать:
-      # - /путь/к/vlesssubtest:/tools/vlesssubtest:ro
+      - VLESSPANEL_VLESSSUBTEST_DAEMON_URL=http://vlesssubtest:7070
+    networks:
+      - vlesspanel-net
     restart: unless-stopped
+
+  vlesssubtest:
+    image: vlesssubtest:latest
+    container_name: vlesssubtest
+    command: --port=7070
+    ports:
+      - "7070:7070"
+    networks:
+      - vlesspanel-net
+    restart: unless-stopped
+
+networks:
+  vlesspanel-net:
+    name: vlesspanel-net

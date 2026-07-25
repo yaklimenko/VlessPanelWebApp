@@ -7,12 +7,11 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	Port             string
-	AggregatorDir    string
-	PanelsFilePath   string
-	StaticDir        string
-	VlessSubTestPath string
-	SingBoxPath      string
+	Port                  string
+	AggregatorDir         string
+	PanelsFilePath        string
+	StaticDir             string
+	VlessSubTestDaemonURL string
 }
 
 // LoadConfig loads configuration from environment variables with defaults
@@ -37,23 +36,17 @@ func LoadConfig() Config {
 		staticDir = filepath.Join("..", "frontend", "dist")
 	}
 
-	vstPath := os.Getenv("VLESSPANEL_VLESSSUBTEST_PATH")
-	if vstPath == "" {
-		vstPath = "/home/klem/VlessSubTest/vlesssubtest"
-	}
-
-	sbPath := os.Getenv("VLESSPANEL_SINGBOX_PATH")
-	if sbPath == "" {
-		sbPath = "/home/klem/VlessSubTest/sing-box"
+	daemonURL := os.Getenv("VLESSPANEL_VLESSSUBTEST_DAEMON_URL")
+	if daemonURL == "" {
+		daemonURL = "http://vlesssubtest:7070"
 	}
 
 	return Config{
-		Port:             port,
-		AggregatorDir:    aggDir,
-		PanelsFilePath:   panelsFile,
-		StaticDir:        staticDir,
-		VlessSubTestPath: vstPath,
-		SingBoxPath:      sbPath,
+		Port:                  port,
+		AggregatorDir:         aggDir,
+		PanelsFilePath:        panelsFile,
+		StaticDir:             staticDir,
+		VlessSubTestDaemonURL: daemonURL,
 	}
 }
 

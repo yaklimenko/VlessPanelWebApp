@@ -218,6 +218,8 @@ export function SubscriptionCard({
                     <th>IP</th>
                     <th>Remarks</th>
                     <th>Status</th>
+                    <th>YT</th>
+                    <th>IG</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -228,6 +230,12 @@ export function SubscriptionCard({
                       <td>{row.remark}</td>
                       <td className={row.status === 'OK' ? 'ok' : 'failed'}>
                         {row.status || 'FAILED'}
+                      </td>
+                      <td className={row.youtube === 'OK' ? 'ok' : 'failed'}>
+                        {row.youtube || '-'}
+                      </td>
+                      <td className={row.instagram === 'OK' ? 'ok' : 'failed'}>
+                        {row.instagram || '-'}
                       </td>
                     </tr>
                   ))}
@@ -243,6 +251,22 @@ export function SubscriptionCard({
 
 function parseTestResults(str) {
   if (!str) return null;
+
+  if (typeof str === 'object' && str.results) {
+    return {
+      okCount: str.ok || 0,
+      totalCount: str.total || 0,
+      rows: str.results.map(r => ({
+        keyIdx: r.key_idx !== undefined ? r.key_idx : r.keyIdx,
+        ip: r.ip || '',
+        remark: r.remark || '',
+        status: r.status || '',
+        youtube: r.youtube || '-',
+        instagram: r.instagram || '-',
+      })),
+    };
+  }
+
   const lines = str.split('\n').filter(l => l.trim());
   const summaryLine = lines[0] || '';
   const m = summaryLine.match(/(\d+)\/(\d+)/);
@@ -255,9 +279,11 @@ function parseTestResults(str) {
       ip: parts[1] || '',
       remark: parts[2] || '',
       status: parts[3] || '',
+      youtube: '-',
+      instagram: '-',
     };
   });
-  return { summaryLine, okCount, totalCount, rows };
+  return { okCount, totalCount, rows };
 }
 
 // ─── Modal forms ───
@@ -265,11 +291,12 @@ export function AddPanelModal({ onClose, onSubmit }) {
   const [name, setName] = React.useState('');
   const [url, setUrl] = React.useState('');
   const [token, setToken] = React.useState('');
+  const [webBasePath, setWebBasePath] = React.useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name || !url || !token) return;
-    onSubmit({ name, url, token });
+    onSubmit({ name, url: url.replace(/\/+$/, ''), token, webBasePath: webBasePath.replace(/\/+$/, '') });
   };
 
   return (
@@ -281,7 +308,11 @@ export function AddPanelModal({ onClose, onSubmit }) {
         </div>
         <div className="form-group">
           <label>URL</label>
-          <input type="text" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://203.0.113.4:2053/..." required />
+          <input type="text" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://203.0.113.4:2053" required />
+        </div>
+        <div className="form-group">
+          <label>Web Base Path</label>
+          <input type="text" value={webBasePath} onChange={e => setWebBasePath(e.target.value)} placeholder="/abcdefgh12345678" />
         </div>
         <div className="form-group">
           <label>Token</label>

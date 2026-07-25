@@ -96,10 +96,11 @@ func (s *Storage) AddPanel(req CreatePanelRequest) (Panel, error) {
 	}
 
 	panel := Panel{
-		ID:    id,
-		Name:  req.Name,
-		URL:   req.URL,
-		Token: req.Token,
+		ID:          id,
+		Name:        req.Name,
+		URL:         req.URL,
+		Token:       req.Token,
+		WebBasePath: req.WebBasePath,
 	}
 
 	panels = append(panels, panel)

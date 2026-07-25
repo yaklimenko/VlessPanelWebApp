@@ -22,6 +22,9 @@ function AppInner() {
   const [inbounds, setInbounds] = useState([]);
   const [loadingClients, setLoadingClients] = useState(false);
 
+  // Client keys (lazy loaded per email)
+  const [clientKeys, setClientKeys] = useState({});
+
   // Subscriptions
   const [subscriptions, setSubscriptions] = useState([]);
   const [openSubId, setOpenSubId] = useState(null);
@@ -67,6 +70,18 @@ function AppInner() {
       .catch(err => showToast('⚠️ ' + err.message))
       .finally(() => setLoadingClients(false));
   }, [currentPanelId]);
+
+  // ─── Lazy-load keys for selected client ───
+  useEffect(() => {
+    if (!currentPanelId || !selectedClientId) return;
+    const client = clients.find(c => c.id === selectedClientId);
+    if (!client || clientKeys[client.email]) return;
+    api.getClientKeys(currentPanelId, client.email)
+      .then(keys => {
+        setClientKeys(prev => ({ ...prev, [client.email]: keys || [] }));
+      })
+      .catch(() => {});
+  }, [selectedClientId, currentPanelId, clients, clientKeys]);
 
   // ─── Load subscriptions ───
   const loadSubscriptions = useCallback(() => {
@@ -117,9 +132,39 @@ function AppInner() {
       .catch(err => showToast('⚠️ ' + err.message));
   };
 
-  const handleCopyKey = (key) => {
-    navigator.clipboard.writeText(key.link).catch(() => {});
-    showToast(`🔑 Ключ «${key.label}» скопирован`);
+  // ─── Clipboard helper ───
+  const copyToClipboard = async (text) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (_) { /* fall through */ }
+
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const handleCopyKey = async (key) => {
+    const ok = await copyToClipboard(key.link);
+    if (ok) {
+      showToast(`🔑 Ключ «${key.label}» скопирован`);
+    } else {
+      showToast('⚠️ Не удалось скопировать в буфер');
+    }
   };
 
   // ─── Subscription handlers ───
@@ -142,9 +187,14 @@ function AppInner() {
       .catch(err => showToast('⚠️ ' + err.message));
   };
 
-  const handleCopySubLink = (sub) => {
-    navigator.clipboard.writeText(sub.link || `config-${sub.name}.txt`).catch(() => {});
-    showToast(`📋 Ссылка подписки скопирована`);
+  const handleCopySubLink = async (sub) => {
+    const text = sub.link || `config-${sub.name}.txt`;
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      showToast(`📋 Ссылка подписки скопирована`);
+    } else {
+      showToast('⚠️ Не удалось скопировать в буфер');
+    }
   };
 
   const handleRefreshSub = () => {
@@ -152,9 +202,13 @@ function AppInner() {
     showToast('🔄 Подписки обновлены');
   };
 
-  const handleCopyVlessKey = (key) => {
-    navigator.clipboard.writeText(key.link).catch(() => {});
-    showToast(`🔑 VLESS-ключ скопирован`);
+  const handleCopyVlessKey = async (key) => {
+    const ok = await copyToClipboard(key.link);
+    if (ok) {
+      showToast(`🔑 VLESS-ключ скопирован`);
+    } else {
+      showToast('⚠️ Не удалось скопировать в буфер');
+    }
   };
 
   const handleDeleteKey = (subId, keyId) => {
@@ -201,7 +255,7 @@ function AppInner() {
     setTestingSubs(prev => ({ ...prev, [subId]: true }));
     api.testSubscription(subId)
       .then(data => {
-        setTestResults(prev => ({ ...prev, [subId]: data.result }));
+        setTestResults(prev => ({ ...prev, [subId]: data }));
         showToast('🧪 Тест завершён');
       })
       .catch(err => showToast('⚠️ ' + err.message))
@@ -251,7 +305,7 @@ function AppInner() {
               filteredClients.map(c => (
                 <ClientCard
                   key={c.id}
-                  client={c}
+                  client={{ ...c, keys: clientKeys[c.email] || [] }}
                   isSelected={selectedClientId === c.id}
                   onToggle={() => setSelectedClientId(prev => prev === c.id ? null : c.id)}
                   onAddKey={(client) => {

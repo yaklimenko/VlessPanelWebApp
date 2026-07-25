@@ -4,10 +4,11 @@ import "encoding/json"
 
 // Panel represents a 3X-UI panel configuration
 type Panel struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	URL   string `json:"url"`
-	Token string `json:"token,omitempty"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	Token       string `json:"token,omitempty"`
+	WebBasePath string `json:"webBasePath,omitempty"`
 }
 
 // Inbound represents a 3X-UI inbound
@@ -58,9 +59,10 @@ type SubKey struct {
 
 // CreatePanelRequest is the request body for adding a panel
 type CreatePanelRequest struct {
-	Name  string `json:"name"`
-	URL   string `json:"url"`
-	Token string `json:"token"`
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	Token       string `json:"token"`
+	WebBasePath string `json:"webBasePath,omitempty"`
 }
 
 // CreateClientRequest is the request body for creating a client
@@ -81,12 +83,27 @@ type UpdateSubscriptionRequest struct {
 	Keys []SubKey `json:"keys,omitempty"`
 }
 
-// TestResult represents a single test result row
-type TestResult struct {
-	KeyIdx int    `json:"keyIdx"`
-	IP     string `json:"ip"`
-	Remark string `json:"remark"`
-	Status string `json:"status"`
+// TestSingleRequest is the body for daemon's POST /test-single
+type TestSingleRequest struct {
+	Vless   string `json:"vless"`
+	Timeout int    `json:"timeout,omitempty"`
+}
+
+// TestSingleResponse is the daemon's response from POST /test-single
+type TestSingleResponse struct {
+	KeyIdx    int    `json:"key_idx"`
+	IP        string `json:"ip"`
+	Remark    string `json:"remark"`
+	Status    string `json:"status"`
+	YouTube   string `json:"youtube"`
+	Instagram string `json:"instagram"`
+}
+
+// TestSubscriptionResponse is the API response for subscription test results
+type TestSubscriptionResponse struct {
+	Total   int                  `json:"total"`
+	OK      int                  `json:"ok"`
+	Results []TestSingleResponse `json:"results"`
 }
 
 // XUIClientStats represents a client from 3X-UI API (tested with v3.4.2)

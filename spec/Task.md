@@ -177,35 +177,10 @@ vless://55555555-5555-5555-5555-555555555555@203.0.113.6:59720?......tM#perMonth
 - Ключи в `config-{ClientName}.txt` хранятся в сыром виде (каждая строка — vless:// ссылка), агрегатор сам оборачивает их в base64.
 - При редактировании подписки через панель приложение перезаписывает файл напрямую, рестарт агрегатора не требуется.
 
----
-
-## Окружение разработки и сборки
-
-### Пути на этом сервере
-- **VlessSubTest:** `/home/klem/VlessSubTest/vlesssubtest`
-- **sing-box:** `/home/klem/VlessSubTest/sing-box`
-- **Проект:** `/home/klem/VlessPanel/` (или куда скажешь)
-
-### Команды
-```bash
-# Бэкенд (Go)
-cd backend && go run .
-
-# Фронт (React + Vite)
-cd frontend && npm run dev
-
-# Продакшн сборка
-cd frontend && npm run build
-# Бэкенд раздаёт статику из frontend/dist
-```
-
----
-
 ## Реализация (прототип ✅)
 
-Стек: Go + React (Vite), обе курицы DeepSeek V4 Flash (Opus на OpenRouter не сработал).
+Стек: Go + React (Vite)
 
-**Проект:** `/home/klem/VlessPanelApp/` → git-репозиторий
 
 ```
 VlessPanelApp/
