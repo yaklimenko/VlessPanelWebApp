@@ -65,7 +65,7 @@ export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onD
           <div className="panel-select">
             <select value={selectedPanelId || ''} onChange={e => onPanelChange(e.target.value)}>
               {panels.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>{p.name} :[{new URL(p.url).hostname}]</option>
               ))}
             </select>
           </div>
