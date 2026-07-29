@@ -42,6 +42,9 @@ func main() {
 		r.Get("/panels/{id}/clients", handlers.ListClients)
 		r.Post("/panels/{id}/clients", handlers.CreateClient)
 		r.Get("/panels/{id}/clients/{email}/keys", handlers.GetClientKeys)
+		r.Post("/panels/{id}/clients/{email}/attach", handlers.AttachInbound)
+		r.Post("/panels/{id}/clients/{email}/detach", handlers.DetachInbound)
+		r.Post("/panels/{id}/clients/{email}/update", handlers.UpdateClient)
 		r.Post("/panels/{id}/inbounds", handlers.ListInbounds)
 		r.Delete("/panels/{id}", handlers.DeletePanel)
 

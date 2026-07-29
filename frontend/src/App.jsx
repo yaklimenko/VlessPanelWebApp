@@ -3,7 +3,7 @@ import { api } from './api';
 import {
   ToastProvider, useToast,
   Header, ClientCard, SubscriptionCard,
-  AddPanelModal, AddClientModal, AddSubscriptionModal,
+  AddPanelModal, AddClientModal, AddSubscriptionModal, EditClientModal,
 } from './components';
 
 function AppInner() {
@@ -20,6 +20,7 @@ function AppInner() {
   const [showAddClient, setShowAddClient] = useState(false);
   const [inbounds, setInbounds] = useState([]);
   const [loadingClients, setLoadingClients] = useState(false);
+  const [editingClient, setEditingClient] = useState(null);
 
   // Subscriptions
   const [subscriptions, setSubscriptions] = useState([]);
@@ -199,6 +200,40 @@ function AppInner() {
     }
   };
 
+  const handleAttachInbound = async (email, inboundId) => {
+    if (!currentPanelId) return;
+    try {
+      await api.attachInbound(currentPanelId, email, { inboundId });
+      showToast('✅ Инбаунд добавлен');
+      api.listClients(currentPanelId).then(d => { setClients(d); setEditingClient(prev => { const c = d.find(x => x.email === email); return c || prev; }); }).catch(() => {});
+    } catch (err) {
+      showToast('⚠️ ' + err.message);
+    }
+  };
+
+  const handleDetachInbound = async (email, inboundId) => {
+    if (!currentPanelId) return;
+    try {
+      await api.detachInbound(currentPanelId, email, { inboundId });
+      showToast('🗑 Инбаунд удалён');
+      api.listClients(currentPanelId).then(d => { setClients(d); setEditingClient(prev => { const c = d.find(x => x.email === email); return c || prev; }); }).catch(() => {});
+    } catch (err) {
+      showToast('⚠️ ' + err.message);
+    }
+  };
+
+  const handleUpdateClient = async (email, expiryDate) => {
+    if (!currentPanelId) return;
+    try {
+      await api.updateClient(currentPanelId, email, { expiryDate });
+      showToast('💾 Клиент обновлён');
+      setEditingClient(null);
+      api.listClients(currentPanelId).then(d => setClients(d)).catch(() => {});
+    } catch (err) {
+      showToast('⚠️ ' + err.message);
+    }
+  };
+
   const handleCopyVlessKey = async (key) => {
     const ok = await copyToClipboard(key.link);
     if (ok) {
@@ -304,6 +339,7 @@ function AppInner() {
                   key={c.id}
                   client={c}
                   onCopyInboundKey={handleCopyInboundKey}
+                  onClick={setEditingClient}
                 />
               ))
             )}
@@ -385,6 +421,16 @@ function AppInner() {
         <AddSubscriptionModal
           onClose={() => setShowAddSub(false)}
           onSubmit={handleCreateSub}
+        />
+      )}
+      {editingClient && (
+        <EditClientModal
+          client={editingClient}
+          allInbounds={inbounds}
+          onClose={() => setEditingClient(null)}
+          onAttachInbound={handleAttachInbound}
+          onDetachInbound={handleDetachInbound}
+          onSave={handleUpdateClient}
         />
       )}
     </div>

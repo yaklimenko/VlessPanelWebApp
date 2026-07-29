@@ -22,11 +22,12 @@ type Inbound struct {
 
 // Client represents a client on a 3X-UI panel
 type Client struct {
-	ID         string   `json:"id"`
-	Email      string   `json:"email"`
-	Enable     bool     `json:"enable"`
-	InboundIDs []int    `json:"inboundIds"`
-	Inbounds   []string `json:"inbounds"`
+	ID         string     `json:"id"`
+	Email      string     `json:"email"`
+	Enable     bool       `json:"enable"`
+	ExpiryTime int64      `json:"expiryTime"`
+	InboundIDs []int      `json:"inboundIds"`
+	Inbounds   []string   `json:"inbounds"`
 	Keys       []VLESSKey `json:"keys,omitempty"`
 }
 
@@ -69,6 +70,11 @@ type CreatePanelRequest struct {
 type CreateClientRequest struct {
 	Email      string `json:"email"`
 	InboundID  int    `json:"inboundId"`
+	ExpiryDate string `json:"expiryDate,omitempty"`
+}
+
+// UpdateClientRequest is the request body for updating a client
+type UpdateClientRequest struct {
 	ExpiryDate string `json:"expiryDate,omitempty"`
 }
 

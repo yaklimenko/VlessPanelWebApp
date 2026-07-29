@@ -311,6 +311,29 @@ input, button, select, textarea { font-family: inherit; font-size: inherit; colo
   display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px;
 }
 
+/* ─── Edit Client Modal ─── */
+.edit-inbound-list {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px;
+}
+.edit-inbound-chip {
+  gap: 4px; padding-right: 6px;
+}
+.edit-inbound-remove {
+  background: none; border: none; color: inherit; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0 2px; opacity: 0.6;
+  transition: opacity .15s;
+}
+.edit-inbound-remove:hover { opacity: 1; color: #ff6b6b; }
+.edit-inbound-add {
+  display: flex; gap: 6px; align-items: center;
+}
+.edit-inbound-add select {
+  padding: 6px 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  font-size: 12px; outline: none;
+}
+.edit-inbound-add select:focus { border-color: var(--accent); }
+
 /* ─── Responsive ─── */
 @media (max-width: 800px) {
   .main { grid-template-columns: 1fr; }

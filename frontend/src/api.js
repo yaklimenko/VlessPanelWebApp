@@ -20,6 +20,9 @@ export const api = {
   listClients: (panelId) => request(`/panels/${panelId}/clients`),
   createClient: (panelId, data) => request(`/panels/${panelId}/clients`, { method: 'POST', body: JSON.stringify(data) }),
   getClientKeys: (panelId, email) => request(`/panels/${panelId}/clients/${encodeURIComponent(email)}/keys`),
+  attachInbound: (panelId, email, data) => request(`/panels/${panelId}/clients/${encodeURIComponent(email)}/attach`, { method: 'POST', body: JSON.stringify(data) }),
+  detachInbound: (panelId, email, data) => request(`/panels/${panelId}/clients/${encodeURIComponent(email)}/detach`, { method: 'POST', body: JSON.stringify(data) }),
+  updateClient: (panelId, email, data) => request(`/panels/${panelId}/clients/${encodeURIComponent(email)}/update`, { method: 'POST', body: JSON.stringify(data) }),
   listInbounds: (panelId) => request(`/panels/${panelId}/inbounds`, { method: 'POST' }),
 
   // Subscriptions

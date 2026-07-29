@@ -165,6 +165,7 @@ func (api *PanelAPI) ListClientsDirect(panel Panel) ([]Client, error) {
 			ID:         xc.Email,
 			Email:      xc.Email,
 			Enable:     xc.Enable,
+			ExpiryTime: xc.ExpiryTime,
 			InboundIDs: xc.InboundIDs,
 			Inbounds:   inboundRemarks,
 			Keys:       []VLESSKey{},
@@ -379,6 +380,98 @@ func (api *PanelAPI) CreateClient(panel Panel, inboundID int, email string, expi
 	resp, err := api.doRequest("POST", url, panel.Token, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
+	}
+
+	xuiResp, err := api.parseResponse(resp)
+	if err != nil {
+		return err
+	}
+
+	if !xuiResp.Success {
+		return fmt.Errorf("3X-UI error: %s", xuiResp.Msg)
+	}
+
+	return nil
+}
+
+// AttachClient attaches an existing client to an additional inbound
+func (api *PanelAPI) AttachClient(panel Panel, email string, inboundID int) error {
+	_url := api.buildURL(panel, fmt.Sprintf("panel/api/clients/%s/attach", email))
+
+	payload := map[string]interface{}{
+		"inboundIds": []int{inboundID},
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshaling payload: %w", err)
+	}
+
+	resp, err := api.doRequest("POST", _url, panel.Token, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("attaching client to inbound: %w", err)
+	}
+
+	xuiResp, err := api.parseResponse(resp)
+	if err != nil {
+		return err
+	}
+
+	if !xuiResp.Success {
+		return fmt.Errorf("3X-UI error: %s", xuiResp.Msg)
+	}
+
+	return nil
+}
+
+// DetachClient detaches a client from an inbound
+func (api *PanelAPI) DetachClient(panel Panel, email string, inboundID int) error {
+	_url := api.buildURL(panel, fmt.Sprintf("panel/api/clients/%s/detach", email))
+
+	payload := map[string]interface{}{
+		"inboundIds": []int{inboundID},
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshaling payload: %w", err)
+	}
+
+	resp, err := api.doRequest("POST", _url, panel.Token, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("detaching client from inbound: %w", err)
+	}
+
+	xuiResp, err := api.parseResponse(resp)
+	if err != nil {
+		return err
+	}
+
+	if !xuiResp.Success {
+		return fmt.Errorf("3X-UI error: %s", xuiResp.Msg)
+	}
+
+	return nil
+}
+
+// UpdateClient updates client fields (expiryTime, etc.) on all attached inbounds
+func (api *PanelAPI) UpdateClient(panel Panel, email string, expiryTime int64) error {
+	_url := api.buildURL(panel, fmt.Sprintf("panel/api/clients/update/%s", email))
+
+	payload := map[string]interface{}{
+		"email":      email,
+		"expiryTime": expiryTime,
+		"enable":     true,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshaling payload: %w", err)
+	}
+
+	resp, err := api.doRequest("POST", _url, panel.Token, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("updating client: %w", err)
 	}
 
 	xuiResp, err := api.parseResponse(resp)

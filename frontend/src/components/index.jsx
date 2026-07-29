@@ -82,9 +82,9 @@ export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onD
 }
 
 // ─── ClientCard ───
-export function ClientCard({ client, onCopyInboundKey }) {
+export function ClientCard({ client, onCopyInboundKey, onClick }) {
   return (
-    <div className="client-card">
+    <div className="client-card" onClick={() => onClick && onClick(client)}>
       <div className="client-card-top">
         <div className="client-name">{client.email}</div>
       </div>
@@ -93,7 +93,7 @@ export function ClientCard({ client, onCopyInboundKey }) {
           <span
             key={idx}
             className="key-chip"
-            onClick={() => onCopyInboundKey && onCopyInboundKey(client.email, inb)}
+            onClick={(e) => { e.stopPropagation(); onCopyInboundKey && onCopyInboundKey(client.email, inb); }}
           >{inb}</span>
         ))}
       </div>
@@ -339,6 +339,69 @@ export function AddClientModal({ onClose, onSubmit, inbounds }) {
           <button type="button" className="btn" onClick={onClose}>Отмена</button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+export function EditClientModal({ client, allInbounds, onClose, onAttachInbound, onDetachInbound, onSave }) {
+  const inbounds = client.inbounds || [];
+  const attachedIds = new Set(inbounds);
+  const available = (allInbounds || []).filter(ib => !attachedIds.has(ib.remark));
+  const [addInboundId, setAddInboundId] = React.useState(available[0]?.id || '');
+  const expiryMillis = client.expiryTime || 0;
+  const expiryStr = expiryMillis > 0
+    ? new Date(expiryMillis).toISOString().slice(0, 10)
+    : '';
+  const [expiryDate, setExpiryDate] = React.useState(expiryStr);
+
+  return (
+    <Modal title="✏️ Редактировать клиента" onClose={onClose}>
+      <div className="modal-form">
+        <div className="form-group">
+          <label>Email</label>
+          <input type="text" value={client.email} disabled style={{opacity: 0.6}} />
+        </div>
+
+        <div className="form-group">
+          <label>Инбаунды</label>
+          <div className="edit-inbound-list">
+            {inbounds.map(inb => (
+              <span key={inb} className="key-chip edit-inbound-chip">
+                {inb}
+                <button
+                  className="edit-inbound-remove"
+                  onClick={() => onDetachInbound(client.email, (allInbounds || []).find(ib => ib.remark === inb)?.id)}
+                  title="Удалить инбаунд"
+                >&times;</button>
+              </span>
+            ))}
+          </div>
+          {available.length > 0 && (
+            <div className="edit-inbound-add">
+              <select value={addInboundId} onChange={e => setAddInboundId(e.target.value)} style={{ flex: 1 }}>
+                {available.map(ib => (
+                  <option key={ib.id} value={ib.id}>{ib.remark} (:{ib.port})</option>
+                ))}
+              </select>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => { onAttachInbound(client.email, parseInt(addInboundId)); }}
+              >Добавить</button>
+            </div>
+          )}
+          {inbounds.length === 0 && <p className="form-hint">Нет привязанных инбаундов</p>}
+        </div>
+
+        <div className="form-group">
+          <label>Дата окончания (полночь UTC)</label>
+          <input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} />
+        </div>
+
+        <div className="modal-actions">
+          <button className="btn btn-primary" onClick={() => onSave(client.email, expiryDate)}>💾 Сохранить</button>
+          <button className="btn" onClick={onClose}>Отмена</button>
+        </div>
+      </div>
     </Modal>
   );
 }

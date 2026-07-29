@@ -253,6 +253,147 @@ func (h *Handlers) ListInbounds(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, simple)
 }
 
+// AttachInbound attaches an existing client to an additional inbound
+func (h *Handlers) AttachInbound(w http.ResponseWriter, r *http.Request) {
+	panelID := chi.URLParam(r, "id")
+	email := chi.URLParam(r, "email")
+
+	var req struct {
+		InboundID int `json:"inboundId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.InboundID == 0 {
+		respondError(w, http.StatusBadRequest, "inboundId is required")
+		return
+	}
+
+	panels, err := h.storage.LoadPanels()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to load panels")
+		return
+	}
+
+	var panel *Panel
+	for i, p := range panels {
+		if p.ID == panelID {
+			panel = &panels[i]
+			break
+		}
+	}
+
+	if panel == nil {
+		respondError(w, http.StatusNotFound, "Panel not found")
+		return
+	}
+
+	if err := h.panelAPI.AttachClient(*panel, email, req.InboundID); err != nil {
+		log.Printf("Error attaching client %s to inbound %d on panel %s: %v", email, req.InboundID, panelID, err)
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to attach inbound: %v", err))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "attached", "email": email})
+}
+
+// DetachInbound detaches a client from an inbound
+func (h *Handlers) DetachInbound(w http.ResponseWriter, r *http.Request) {
+	panelID := chi.URLParam(r, "id")
+	email := chi.URLParam(r, "email")
+
+	var req struct {
+		InboundID int `json:"inboundId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.InboundID == 0 {
+		respondError(w, http.StatusBadRequest, "inboundId is required")
+		return
+	}
+
+	panels, err := h.storage.LoadPanels()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to load panels")
+		return
+	}
+
+	var panel *Panel
+	for i, p := range panels {
+		if p.ID == panelID {
+			panel = &panels[i]
+			break
+		}
+	}
+
+	if panel == nil {
+		respondError(w, http.StatusNotFound, "Panel not found")
+		return
+	}
+
+	if err := h.panelAPI.DetachClient(*panel, email, req.InboundID); err != nil {
+		log.Printf("Error detaching client %s from inbound %d on panel %s: %v", email, req.InboundID, panelID, err)
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to detach inbound: %v", err))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "detached", "email": email})
+}
+
+// UpdateClient updates client fields (expiry date, etc.)
+func (h *Handlers) UpdateClient(w http.ResponseWriter, r *http.Request) {
+	panelID := chi.URLParam(r, "id")
+	email := chi.URLParam(r, "email")
+
+	var req UpdateClientRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	panels, err := h.storage.LoadPanels()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to load panels")
+		return
+	}
+
+	var panel *Panel
+	for i, p := range panels {
+		if p.ID == panelID {
+			panel = &panels[i]
+			break
+		}
+	}
+
+	if panel == nil {
+		respondError(w, http.StatusNotFound, "Panel not found")
+		return
+	}
+
+	var expiryTime int64
+	if req.ExpiryDate != "" {
+		t, err := time.Parse("2006-01-02", req.ExpiryDate)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid expiryDate format (expected YYYY-MM-DD)")
+			return
+		}
+		expiryTime = t.Unix() * 1000
+	}
+
+	if err := h.panelAPI.UpdateClient(*panel, email, expiryTime); err != nil {
+		log.Printf("Error updating client %s on panel %s: %v", email, panelID, err)
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to update client: %v", err))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "updated", "email": email})
+}
+
 // --- Subscription Handlers ---
 
 // ListSubscriptions returns all subscriptions
