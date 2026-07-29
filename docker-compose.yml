@@ -6,9 +6,10 @@ services:
       - "9090:8080"
     volumes:
       - ./data:/data
+      - /opt/aggregator-configs/configs:/opt/aggregator-configs/configs
     environment:
       - VLESSPANEL_PORT=8080
-      - VLESSPANEL_AGGREGATOR_DIR=/data/aggregator
+      - VLESSPANEL_AGGREGATOR_DIR=/opt/aggregator-configs/configs
       - VLESSPANEL_PANELS_FILE=/data/panels.json
       - VLESSPANEL_STATIC_DIR=/app/static
       - VLESSPANEL_VLESSSUBTEST_DAEMON_URL=http://vlesssubtest:7070

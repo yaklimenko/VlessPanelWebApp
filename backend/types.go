@@ -67,8 +67,9 @@ type CreatePanelRequest struct {
 
 // CreateClientRequest is the request body for creating a client
 type CreateClientRequest struct {
-	Email     string `json:"email"`
-	InboundID int    `json:"inboundId"`
+	Email      string `json:"email"`
+	InboundID  int    `json:"inboundId"`
+	ExpiryDate string `json:"expiryDate,omitempty"`
 }
 
 // CreateSubscriptionRequest is the request body for creating a subscription
@@ -137,12 +138,35 @@ type XUIClient struct {
 
 // XUIInbound represents an inbound from 3X-UI API (tested with v3.4.2)
 type XUIInbound struct {
-	ID          int              `json:"id"`
-	Remark      string           `json:"remark"`
-	Port        int              `json:"port"`
-	Protocol    string           `json:"protocol"`
-	Settings    json.RawMessage  `json:"settings"`
-	ClientStats []XUIClientStats `json:"clientStats"`
+	ID             int                `json:"id"`
+	Remark         string             `json:"remark"`
+	Port           int                `json:"port"`
+	Protocol       string             `json:"protocol"`
+	Settings       json.RawMessage    `json:"settings"`
+	StreamSettings *XUIStreamSettings `json:"streamSettings,omitempty"`
+	ClientStats    []XUIClientStats   `json:"clientStats"`
+}
+
+// XUIStreamSettings represents streamSettings in a 3X-UI inbound
+type XUIStreamSettings struct {
+	Network         string             `json:"network"`
+	Security        string             `json:"security"`
+	RealitySettings *XUIRealitySettings `json:"realitySettings,omitempty"`
+}
+
+// XUIRealitySettings represents realitySettings in streamSettings
+type XUIRealitySettings struct {
+	ServerNames []string                 `json:"serverNames,omitempty"`
+	ShortIds    []string                 `json:"shortIds,omitempty"`
+	Settings    *XUIRealityClientSettings `json:"settings,omitempty"`
+}
+
+// XUIRealityClientSettings represents the nested settings inside realitySettings
+type XUIRealityClientSettings struct {
+	PublicKey   string `json:"publicKey,omitempty"`
+	Fingerprint string `json:"fingerprint,omitempty"`
+	ServerName  string `json:"serverName,omitempty"`
+	SpiderX     string `json:"spiderX,omitempty"`
 }
 
 // XUIResponse is a generic 3X-UI API response

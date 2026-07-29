@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -276,16 +277,58 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 				continue
 			}
 
-			// Build VLESS key
-			link := fmt.Sprintf("vless://%s@%s:%d?encryption=none&security=%s&type=%s#%s-%s",
-				client.ID,
-				// Extract host from panel URL
-				extractHost(panel.URL),
-				inbound.Port,
-				guessSecurity(inbound.Protocol),
-				guessTransport(inbound.Protocol),
-				inbound.Remark,
-				email,
+			host := extractHost(panel.URL)
+			transport := guessTransport(inbound.Protocol)
+			security := guessSecurity(inbound.Protocol)
+
+			var params []string
+			params = append(params, "encryption=none")
+
+			if client.Flow != "" {
+				params = append(params, "flow="+client.Flow)
+			}
+
+			ss := inbound.StreamSettings
+			if ss != nil {
+				if ss.Network != "" {
+					transport = ss.Network
+				}
+				if ss.Security != "" {
+					security = ss.Security
+				}
+
+				rs := ss.RealitySettings
+				if rs != nil && rs.Settings != nil {
+					rcs := rs.Settings
+					if rcs.Fingerprint != "" {
+						params = append(params, "fp="+rcs.Fingerprint)
+					}
+					if rcs.PublicKey != "" {
+						params = append(params, "pbk="+rcs.PublicKey)
+					}
+				}
+				if rs != nil {
+					if len(rs.ShortIds) > 0 {
+						params = append(params, "sid="+rs.ShortIds[0])
+					}
+					if rs.Settings != nil && rs.Settings.ServerName != "" {
+						params = append(params, "sni="+rs.Settings.ServerName)
+					} else if len(rs.ServerNames) > 0 {
+						params = append(params, "sni="+rs.ServerNames[0])
+					}
+					if rs.Settings != nil && rs.Settings.SpiderX != "" {
+						params = append(params, "spx="+url.QueryEscape(rs.Settings.SpiderX))
+					}
+				}
+			}
+
+			params = append(params, "security="+security)
+			params = append(params, "type="+transport)
+
+			link := fmt.Sprintf("vless://%s@%s:%d?%s#%s-%s",
+				client.ID, host, inbound.Port,
+				strings.Join(params, "&"),
+				inbound.Remark, email,
 			)
 
 			keys = append(keys, VLESSKey{
@@ -293,10 +336,10 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 				Protocol:  inbound.Protocol,
 				Link:      link,
 				Inbound:   inbound.Remark,
-				Server:    extractHost(panel.URL),
+				Server:    host,
 				Port:      inbound.Port,
-				Security:  guessSecurity(inbound.Protocol),
-				Transport: guessTransport(inbound.Protocol),
+				Security:  security,
+				Transport: transport,
 			})
 		}
 	}
@@ -305,14 +348,26 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 }
 
 // CreateClient creates a new client on a panel's inbounds (3X-UI v3.5.0+)
-func (api *PanelAPI) CreateClient(panel Panel, inboundID int, email string) error {
+func (api *PanelAPI) CreateClient(panel Panel, inboundID int, email string, expiryDate string) error {
 	url := api.buildURL(panel, "panel/api/clients/add")
 
+	clientObj := map[string]interface{}{
+		"email":  email,
+		"enable": true,
+		"flow":   "xtls-rprx-vision",
+	}
+
+	if expiryDate != "" {
+		t, err := time.Parse("2006-01-02", expiryDate)
+		if err != nil {
+			return fmt.Errorf("invalid expiryDate format (expected YYYY-MM-DD): %w", err)
+		}
+		expiryTime := t.Unix() * 1000
+		clientObj["expiryTime"] = expiryTime
+	}
+
 	payload := map[string]interface{}{
-		"client": map[string]interface{}{
-			"email":  email,
-			"enable": true,
-		},
+		"client":     clientObj,
 		"inboundIds": []int{inboundID},
 	}
 

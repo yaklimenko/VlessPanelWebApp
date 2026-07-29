@@ -159,7 +159,7 @@ func (h *Handlers) CreateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.panelAPI.CreateClient(*panel, req.InboundID, req.Email); err != nil {
+	if err := h.panelAPI.CreateClient(*panel, req.InboundID, req.Email, req.ExpiryDate); err != nil {
 		log.Printf("Error creating client on panel %s: %v", panelID, err)
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create client: %v", err))
 		return

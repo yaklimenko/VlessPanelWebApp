@@ -82,43 +82,20 @@ export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onD
 }
 
 // ─── ClientCard ───
-export function ClientCard({ client, isSelected, onToggle, onAddKey, onCopyKey }) {
+export function ClientCard({ client, onCopyInboundKey }) {
   return (
-    <div
-      className={`client-card ${isSelected ? 'selected' : ''}`}
-      onClick={onToggle}
-    >
-      <div className="client-card-top" onClick={e => e.stopPropagation()}>
-        <div>
-          <div className="client-name">{client.email}</div>
-          <div className="client-inbounds">({(client.inbounds || []).join(', ')})</div>
-        </div>
-        <div className="client-actions">
-          <button
-            className="btn btn-primary btn-xs add-key-btn"
-            onClick={(e) => { e.stopPropagation(); onAddKey(client); }}
-          >+ Ключ</button>
-          <button
-            className="btn btn-xs btn-icon key-toggle-btn"
-            onClick={(e) => { e.stopPropagation(); onToggle(); }}
-            title="Показать VLESS-ключи"
-          >🔑</button>
-        </div>
+    <div className="client-card">
+      <div className="client-card-top">
+        <div className="client-name">{client.email}</div>
       </div>
-      <div className={`keys-dropdown ${isSelected ? 'open' : ''}`} onClick={e => e.stopPropagation()}>
-        <div className="keys-list">
-          {(client.keys || []).length === 0 && (
-            <span className="key-chip" style={{ opacity: 0.5, cursor: 'default' }}>Нет ключей</span>
-          )}
-          {(client.keys || []).map((k, idx) => (
-            <span
-              key={idx}
-              className="key-chip"
-              title={k.link}
-              onClick={() => onCopyKey(k)}
-            >{k.label}</span>
-          ))}
-        </div>
+      <div className="keys-list" style={{ marginTop: 6 }}>
+        {(client.inbounds || []).map((inb, idx) => (
+          <span
+            key={idx}
+            className="key-chip"
+            onClick={() => onCopyInboundKey && onCopyInboundKey(client.email, inb)}
+          >{inb}</span>
+        ))}
       </div>
     </div>
   );
@@ -330,11 +307,12 @@ export function AddPanelModal({ onClose, onSubmit }) {
 export function AddClientModal({ onClose, onSubmit, inbounds }) {
   const [email, setEmail] = React.useState('');
   const [inboundId, setInboundId] = React.useState(inbounds[0]?.id || '');
+  const [expiryDate, setExpiryDate] = React.useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!email || !inboundId) return;
-    onSubmit({ email, inboundId: parseInt(inboundId) });
+    onSubmit({ email, inboundId: parseInt(inboundId), expiryDate });
   };
 
   return (
@@ -351,6 +329,10 @@ export function AddClientModal({ onClose, onSubmit, inbounds }) {
               <option key={ib.id} value={ib.id}>{ib.remark} (:{ib.port})</option>
             ))}
           </select>
+        </div>
+        <div className="form-group">
+          <label>Дата окончания (опционально, полночь UTC)</label>
+          <input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} />
         </div>
         <div className="modal-actions">
           <button type="submit" className="btn btn-primary">➕ Создать</button>

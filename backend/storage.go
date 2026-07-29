@@ -152,12 +152,12 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 			continue
 		}
 		name := entry.Name()
-		if !strings.HasPrefix(name, "config-") || !strings.HasSuffix(name, ".txt") {
+		if !strings.HasPrefix(name, "configs-") || !strings.HasSuffix(name, ".txt") {
 			continue
 		}
 
-		// Extract client name: config-{ClientName}.txt
-		clientName := strings.TrimPrefix(name, "config-")
+		// Extract client name: configs-{ClientName}.txt
+		clientName := strings.TrimPrefix(name, "configs-")
 		clientName = strings.TrimSuffix(clientName, ".txt")
 
 		sub := Subscription{
@@ -212,7 +212,7 @@ func (s *Storage) CreateSubscription(req CreateSubscriptionRequest) (Subscriptio
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	filePath := filepath.Join(s.aggregatorDir, "config-"+req.Name+".txt")
+	filePath := filepath.Join(s.aggregatorDir, "configs-"+req.Name+".txt")
 
 	var lines []string
 	for _, k := range req.Keys {
@@ -236,7 +236,7 @@ func (s *Storage) UpdateSubscription(name string, req UpdateSubscriptionRequest)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	filePath := filepath.Join(s.aggregatorDir, "config-"+name+".txt")
+	filePath := filepath.Join(s.aggregatorDir, "configs-"+name+".txt")
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return Subscription{}, fmt.Errorf("subscription %s not found", name)
@@ -256,7 +256,7 @@ func (s *Storage) UpdateSubscription(name string, req UpdateSubscriptionRequest)
 	if req.Name != "" {
 		newName = req.Name
 		// Rename file
-		newPath := filepath.Join(s.aggregatorDir, "config-"+req.Name+".txt")
+		newPath := filepath.Join(s.aggregatorDir, "configs-"+req.Name+".txt")
 		if err := os.Rename(filePath, newPath); err != nil {
 			return Subscription{}, fmt.Errorf("renaming subscription file: %w", err)
 		}
@@ -274,7 +274,7 @@ func (s *Storage) DeleteSubscription(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	filePath := filepath.Join(s.aggregatorDir, "config-"+name+".txt")
+	filePath := filepath.Join(s.aggregatorDir, "configs-"+name+".txt")
 	if err := os.Remove(filePath); err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("subscription %s not found", name)
@@ -290,7 +290,7 @@ func (s *Storage) GetSubscriptionRaw(name string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	filePath := filepath.Join(s.aggregatorDir, "config-"+name+".txt")
+	filePath := filepath.Join(s.aggregatorDir, "configs-"+name+".txt")
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {

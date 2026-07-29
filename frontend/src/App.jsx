@@ -16,14 +16,10 @@ function AppInner() {
 
   // Clients
   const [clients, setClients] = useState([]);
-  const [selectedClientId, setSelectedClientId] = useState(null);
   const [clientSearch, setClientSearch] = useState('');
   const [showAddClient, setShowAddClient] = useState(false);
   const [inbounds, setInbounds] = useState([]);
   const [loadingClients, setLoadingClients] = useState(false);
-
-  // Client keys (lazy loaded per email)
-  const [clientKeys, setClientKeys] = useState({});
 
   // Subscriptions
   const [subscriptions, setSubscriptions] = useState([]);
@@ -71,17 +67,7 @@ function AppInner() {
       .finally(() => setLoadingClients(false));
   }, [currentPanelId]);
 
-  // ─── Lazy-load keys for selected client ───
-  useEffect(() => {
-    if (!currentPanelId || !selectedClientId) return;
-    const client = clients.find(c => c.id === selectedClientId);
-    if (!client || clientKeys[client.email]) return;
-    api.getClientKeys(currentPanelId, client.email)
-      .then(keys => {
-        setClientKeys(prev => ({ ...prev, [client.email]: keys || [] }));
-      })
-      .catch(() => {});
-  }, [selectedClientId, currentPanelId, clients, clientKeys]);
+  // ─── Lazy-load keys ───
 
   // ─── Load subscriptions ───
   const loadSubscriptions = useCallback(() => {
@@ -158,15 +144,6 @@ function AppInner() {
     }
   };
 
-  const handleCopyKey = async (key) => {
-    const ok = await copyToClipboard(key.link);
-    if (ok) {
-      showToast(`🔑 Ключ «${key.label}» скопирован`);
-    } else {
-      showToast('⚠️ Не удалось скопировать в буфер');
-    }
-  };
-
   // ─── Subscription handlers ───
   const handleCreateSub = (data) => {
     api.createSubscription(data)
@@ -200,6 +177,26 @@ function AppInner() {
   const handleRefreshSub = () => {
     loadSubscriptions();
     showToast('🔄 Подписки обновлены');
+  };
+
+  const handleCopyInboundKey = async (email, inboundName) => {
+    if (!currentPanelId) return;
+    try {
+      const keys = await api.getClientKeys(currentPanelId, email);
+      const match = (keys || []).find(k => k.inbound === inboundName);
+      if (!match) {
+        showToast('⚠️ Ключ для этого инбаунда не найден');
+        return;
+      }
+      const ok = await copyToClipboard(match.link);
+      if (ok) {
+        showToast(`🔑 VLESS-ключ скопирован (${inboundName})`);
+      } else {
+        showToast('⚠️ Не удалось скопировать в буфер');
+      }
+    } catch (err) {
+      showToast('⚠️ ' + err.message);
+    }
   };
 
   const handleCopyVlessKey = async (key) => {
@@ -305,15 +302,8 @@ function AppInner() {
               filteredClients.map(c => (
                 <ClientCard
                   key={c.id}
-                  client={{ ...c, keys: clientKeys[c.email] || [] }}
-                  isSelected={selectedClientId === c.id}
-                  onToggle={() => setSelectedClientId(prev => prev === c.id ? null : c.id)}
-                  onAddKey={(client) => {
-                    setShowAddClient(false);
-                    setSelectedClientId(client.id);
-                    showToast(`🔑 Создание ключа для ${client.email}`);
-                  }}
-                  onCopyKey={handleCopyKey}
+                  client={c}
+                  onCopyInboundKey={handleCopyInboundKey}
                 />
               ))
             )}

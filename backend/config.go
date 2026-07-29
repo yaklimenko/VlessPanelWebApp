@@ -51,5 +51,5 @@ func LoadConfig() Config {
 }
 
 func (c Config) SubscriptionFilePath(name string) string {
-	return filepath.Join(c.AggregatorDir, "config-"+name+".txt")
+	return filepath.Join(c.AggregatorDir, "configs-"+name+".txt")
 }
