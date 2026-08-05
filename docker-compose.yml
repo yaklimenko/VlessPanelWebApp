@@ -20,9 +20,13 @@ services:
   vlesssubtest:
     image: vlesssubtest:latest
     container_name: vlesssubtest
-    command: --port=7070
+    # --log накапливает прогоны в bbolt; /data/results.db лежит вне контейнера.
+    # /data/config.json — опциональный конфиг крона (см. README vlesssubtest).
+    command: --port=7070 --log --db=/data/results.db --cron-config=/data/config.json
     ports:
       - "7070:7070"
+    volumes:
+      - ./data/vlesssubtest:/data
     networks:
       - vlesspanel-net
     restart: unless-stopped
