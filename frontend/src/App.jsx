@@ -33,7 +33,7 @@ function AppInner() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [activeSubId, setActiveSubId] = useState(null);
   const [generating, setGenerating] = useState(false);
-  const [testingSub, setTestingSub] = useState(false);
+  const [testingSubs, setTestingSubs] = useState(new Set());
   const [subTestResults, setSubTestResults] = useState({});
   const [syncing, setSyncing] = useState(false);
 
@@ -314,15 +314,15 @@ function AppInner() {
 
   // ─── Subscription test ───
   const handleTestSub = (sub) => {
-    if (!sub || testingSub) return;
-    setTestingSub(true);
+    if (!sub || testingSubs.has(sub.id)) return;
+    setTestingSubs(prev => new Set(prev).add(sub.id));
     api.testSubscription(sub.id)
       .then(data => {
         setSubTestResults(prev => ({ ...prev, [sub.id]: data }));
         showToast(`🧪 Тест завершён: ${data.ok}/${data.total}`, data.ok === data.total ? 'ok' : 'warn');
       })
       .catch(err => showToast('⚠️ ' + err.message))
-      .finally(() => setTestingSub(false));
+      .finally(() => setTestingSubs(prev => { const n = new Set(prev); n.delete(sub.id); return n; }));
   };
 
   // ─── Delete subscription ───
@@ -516,7 +516,7 @@ function AppInner() {
                 keySourceById={keySourceById}
                 testingKs={testingKs}
                 generating={generating}
-                testingSub={testingSub}
+                testingSub={testingSubs.has(activeSub.id)}
                 testResults={subTestResults[activeSub.id] || null}
                 testableCount={testableCount}
                 onGenerate={() => handleGenerate(activeSub)}
@@ -658,8 +658,8 @@ function SubscriptionDetail({
           <button className="btn btn-success" onClick={onGenerate} disabled={!hasKeys || generating}>
             {generating ? <span className="spin"></span> : genLabel}
           </button>
-          <button className="btn" onClick={onTestSub} disabled={!testableCount || testingSub}>
-            {testingSub ? <span className="spin"></span> : '🧪 Тест подписки'}
+          <button className="btn" onClick={onTestSub} disabled={!testableCount || testingSub} title={testingSub ? 'Тест идёт…' : 'Тест подписки'}>
+            {testingSub ? <span className="spin small"></span> : '🧪'} Тест подписки
           </button>
           <button className="btn btn-sm" onClick={onCopyLink} disabled={sub.status !== 'active'} title="Скопировать ссылку подписки">⧉ ссылка</button>
           <button className="btn btn-sm" onClick={onRefresh} title="Обновить статусы">🔄</button>
