@@ -15,7 +15,7 @@ function AppInner() {
 
   // Panels / clients
   const [panels, setPanels] = useState([]);
-  const [currentPanelId, setCurrentPanelId] = useState(null);
+  const [currentPanelId, setCurrentPanelId] = useState(() => { try { return localStorage.getItem('vlesspanel:panelId') || null; } catch { return null; } });
   const [clients, setClients] = useState([]);
   const [inbounds, setInbounds] = useState([]);
   const [clientsError, setClientsError] = useState(null);
@@ -31,7 +31,7 @@ function AppInner() {
 
   // Subscriptions
   const [subscriptions, setSubscriptions] = useState([]);
-  const [activeSubId, setActiveSubId] = useState(null);
+  const [activeSubId, setActiveSubId] = useState(() => { try { return localStorage.getItem('vlesspanel:subId') || null; } catch { return null; } });
   const [generating, setGenerating] = useState(false);
   const [testingSubs, setTestingSubs] = useState(new Set());
   const [subTestResults, setSubTestResults] = useState({});
@@ -64,6 +64,15 @@ function AppInner() {
     if (panels.length === 0) setCurrentPanelId(null);
     else if (currentPanelId && !panels.some(p => p.id === currentPanelId)) setCurrentPanelId(panels[0].id);
   }, [panels, currentPanelId]);
+
+  // ─── Persist selected panel/subscription to localStorage ───
+  useEffect(() => {
+    try { if (currentPanelId) localStorage.setItem('vlesspanel:panelId', currentPanelId); else localStorage.removeItem('vlesspanel:panelId'); } catch {}
+  }, [currentPanelId]);
+
+  useEffect(() => {
+    try { if (activeSubId) localStorage.setItem('vlesspanel:subId', activeSubId); else localStorage.removeItem('vlesspanel:subId'); } catch {}
+  }, [activeSubId]);
 
   // ─── Load clients + inbounds for panel ───
   useEffect(() => {
