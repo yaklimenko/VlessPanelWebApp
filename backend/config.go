@@ -12,6 +12,9 @@ type Config struct {
 	PanelsFilePath        string
 	StaticDir             string
 	VlessSubTestDaemonURL string
+	DataDir               string
+	AggregatorURL         string // base URL of the aggregator (for sync status HEAD)
+	SyncScript            string // rsync script to push configs to the aggregator
 }
 
 // LoadConfig loads configuration from environment variables with defaults
@@ -41,12 +44,30 @@ func LoadConfig() Config {
 		daemonURL = "http://vlesssubtest:7070"
 	}
 
+	dataDir := os.Getenv("VLESSPANEL_DATA_DIR")
+	if dataDir == "" {
+		dataDir = filepath.Dir(panelsFile)
+	}
+
+	aggURL := os.Getenv("VLESSPANEL_AGGREGATOR_URL")
+	if aggURL == "" {
+		aggURL = "https://example.com"
+	}
+
+	syncScript := os.Getenv("VLESSPANEL_SYNC_SCRIPT")
+	if syncScript == "" {
+		syncScript = "/opt/aggregator-configs/sync-configs.sh"
+	}
+
 	return Config{
 		Port:                  port,
 		AggregatorDir:         aggDir,
 		PanelsFilePath:        panelsFile,
 		StaticDir:             staticDir,
 		VlessSubTestDaemonURL: daemonURL,
+		DataDir:               dataDir,
+		AggregatorURL:         aggURL,
+		SyncScript:            syncScript,
 	}
 }
 

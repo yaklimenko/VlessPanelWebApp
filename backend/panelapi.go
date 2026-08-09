@@ -19,7 +19,8 @@ type PanelAPI struct {
 	client *http.Client
 }
 
-// NewPanelAPI creates a new PanelAPI
+// NewPanelAPI creates a new PanelAPI.
+// The timeout is 10 seconds per operation with 3X-UI (per spec).
 func NewPanelAPI() *PanelAPI {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -27,7 +28,7 @@ func NewPanelAPI() *PanelAPI {
 	return &PanelAPI{
 		client: &http.Client{
 			Transport: tr,
-			Timeout:   30 * time.Second,
+			Timeout:   10 * time.Second,
 		},
 	}
 }
@@ -170,6 +171,8 @@ func (api *PanelAPI) ListClientsDirect(panel Panel) ([]Client, error) {
 			InboundIDs: xc.InboundIDs,
 			Inbounds:   inboundRemarks,
 			Keys:       []VLESSKey{},
+			Up:         xc.Traffic.Up,
+			Down:       xc.Traffic.Down,
 		})
 	}
 
@@ -226,6 +229,8 @@ func (api *PanelAPI) listClientsFromInbounds(panel Panel) ([]Client, error) {
 				// Add inbound to existing client
 				existing.Inbounds = append(existing.Inbounds, inbound.Remark)
 				existing.InboundIDs = append(existing.InboundIDs, inbound.ID)
+				existing.Up += stat.Up
+				existing.Down += stat.Down
 			} else {
 				client := Client{
 					ID:         clientID,
@@ -234,6 +239,8 @@ func (api *PanelAPI) listClientsFromInbounds(panel Panel) ([]Client, error) {
 					InboundIDs: []int{inbound.ID},
 					Inbounds:   []string{inbound.Remark},
 					Keys:       []VLESSKey{},
+					Up:         stat.Up,
+					Down:       stat.Down,
 				}
 				clientMap[clientID] = &client
 			}
@@ -549,6 +556,58 @@ func (api *PanelAPI) UpdateClient(panel Panel, email string, expiryTime int64) e
 	}
 
 	return nil
+}
+
+// GetClientKeyForInbound returns the VLESS key for a specific client on a
+// specific inbound (matched by inbound port). Fails if the client/inbound
+// no longer exists on the panel.
+func (api *PanelAPI) GetClientKeyForInbound(panel Panel, email string, inboundID int) (VLESSKey, error) {
+	inbounds, err := api.ListInbounds(panel)
+	if err != nil {
+		return VLESSKey{}, err
+	}
+
+	var targetPort int
+	foundInbound := false
+	for _, ib := range inbounds {
+		if ib.ID == inboundID {
+			targetPort = ib.Port
+			foundInbound = true
+			break
+		}
+	}
+	if !foundInbound {
+		return VLESSKey{}, fmt.Errorf("инбаунд %d не найден на панели", inboundID)
+	}
+
+	keys, err := api.GetClientKeys(panel, email)
+	if err != nil {
+		return VLESSKey{}, err
+	}
+
+	for _, k := range keys {
+		if k.Port == targetPort {
+			return k, nil
+		}
+	}
+
+	return VLESSKey{}, fmt.Errorf("ключ для клиента %s на инбаунде %d не найден", email, inboundID)
+}
+
+// GetClientStats fetches traffic/expiry stats for a client from the panel's
+// /panel/api/clients/list endpoint (present in 3X-UI 3.3.1+).
+func (api *PanelAPI) GetClientStats(panel Panel, email string) (*Client, error) {
+	clients, err := api.ListClients(panel)
+	if err != nil {
+		return nil, err
+	}
+	for i := range clients {
+		if clients[i].Email == email {
+			c := clients[i]
+			return &c, nil
+		}
+	}
+	return nil, fmt.Errorf("клиент %s не найден на панели", email)
 }
 
 // extractHost extracts the host from a panel URL

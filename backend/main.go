@@ -23,7 +23,7 @@ func main() {
 	log.Println("========================================")
 
 	// Initialize storage
-	storage := NewStorage(config.PanelsFilePath, config.AggregatorDir)
+	storage := NewStorage(config.PanelsFilePath, config.AggregatorDir, config.DataDir)
 	panelAPI := NewPanelAPI()
 	handlers := NewHandlers(storage, panelAPI, config)
 
@@ -56,6 +56,18 @@ func main() {
 		r.Delete("/subscriptions/{id}", handlers.DeleteSubscription)
 		r.Get("/subscriptions/{id}/raw", handlers.GetSubscriptionRaw)
 		r.Post("/subscriptions/{id}/test", handlers.TestSubscription)
+
+		// Key sources
+		r.Get("/key-sources", handlers.ListKeySources)
+		r.Post("/key-sources", handlers.CreateKeySource)
+		r.Get("/key-sources/{id}", handlers.GetKeySource)
+		r.Delete("/key-sources/{id}", handlers.DeleteKeySource)
+		r.Get("/key-sources/{id}/key", handlers.GetKeySourceKey)
+		r.Get("/key-sources/{id}/test", handlers.TestKeySource)
+		r.Get("/key-sources/{id}/traffic", handlers.GetKeySourceTraffic)
+
+		// Sync with the aggregator
+		r.Post("/sync", handlers.SyncToAggregator)
 
 		// Utility
 		r.Get("/vlesssubtest-status", handlers.GetVlessSubTestStatus)

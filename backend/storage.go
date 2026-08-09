@@ -5,31 +5,61 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
 
-// Storage handles file-based data persistence
+// Storage handles file-based data persistence.
+// Layout:
+//   - panels.json        — list of 3X-UI panels
+//   - key-sources.json   — list of KeySource records
+//   - subscriptions.json — subscription metadata (status, keySourceId refs, updatedAt)
+//   - aggregatorDir      — generated subscription files configs-{name}.txt
+//
+// Legacy subscriptions (files without metadata) are still readable: their keys
+// are reported as manual SubKeys with keySourceId=null.
 type Storage struct {
-	mu           sync.RWMutex
-	panelsPath   string
-	aggregatorDir string
+	mu             sync.RWMutex
+	panelsPath     string
+	aggregatorDir  string
+	keySourcesPath string
+	subsMetaPath   string
 }
 
-// NewStorage creates a new Storage instance
-func NewStorage(panelsPath, aggregatorDir string) *Storage {
+// NewStorage creates a new Storage instance.
+func NewStorage(panelsPath, aggregatorDir, dataDir string) *Storage {
 	// Ensure panels.json exists
 	if _, err := os.Stat(panelsPath); os.IsNotExist(err) {
 		initial := []Panel{}
 		data, _ := json.MarshalIndent(initial, "", "  ")
 		os.WriteFile(panelsPath, data, 0644)
 	}
-	// Ensure aggregator dir exists
+	// Ensure dirs exist
 	os.MkdirAll(aggregatorDir, 0755)
+	os.MkdirAll(dataDir, 0755)
+
+	keySourcesPath := filepath.Join(dataDir, "key-sources.json")
+	subsMetaPath := filepath.Join(dataDir, "subscriptions.json")
+
+	// Ensure key-sources.json exists
+	if _, err := os.Stat(keySourcesPath); os.IsNotExist(err) {
+		initial := []KeySource{}
+		data, _ := json.MarshalIndent(initial, "", "  ")
+		os.WriteFile(keySourcesPath, data, 0644)
+	}
+	// Ensure subscriptions.json exists
+	if _, err := os.Stat(subsMetaPath); os.IsNotExist(err) {
+		initial := []Subscription{}
+		data, _ := json.MarshalIndent(initial, "", "  ")
+		os.WriteFile(subsMetaPath, data, 0644)
+	}
 
 	return &Storage{
-		panelsPath:    panelsPath,
-		aggregatorDir: aggregatorDir,
+		panelsPath:     panelsPath,
+		aggregatorDir:  aggregatorDir,
+		keySourcesPath: keySourcesPath,
+		subsMetaPath:   subsMetaPath,
 	}
 }
 
@@ -134,12 +164,300 @@ func (s *Storage) DeletePanel(id string) error {
 	return s.SavePanels(panels)
 }
 
-// --- Subscriptions (files in aggregator directory) ---
+// --- Key Sources ---
 
-// ListSubscriptions returns all subscription files
+// LoadKeySources reads all KeySources from key-sources.json
+func (s *Storage) LoadKeySources() ([]KeySource, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	data, err := os.ReadFile(s.keySourcesPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading key sources file: %w", err)
+	}
+
+	var sources []KeySource
+	if err := json.Unmarshal(data, &sources); err != nil {
+		return nil, fmt.Errorf("parsing key sources file: %w", err)
+	}
+
+	return sources, nil
+}
+
+// SaveKeySources writes KeySources to key-sources.json
+func (s *Storage) SaveKeySources(sources []KeySource) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := json.MarshalIndent(sources, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling key sources: %w", err)
+	}
+
+	if err := os.WriteFile(s.keySourcesPath, data, 0644); err != nil {
+		return fmt.Errorf("writing key sources file: %w", err)
+	}
+
+	return nil
+}
+
+// GetKeySource returns a KeySource by ID.
+func (s *Storage) GetKeySource(id string) (*KeySource, error) {
+	sources, err := s.LoadKeySources()
+	if err != nil {
+		return nil, err
+	}
+	for i := range sources {
+		if sources[i].ID == id {
+			ks := sources[i]
+			return &ks, nil
+		}
+	}
+	return nil, fmt.Errorf("key source %s not found", id)
+}
+
+// UpdateKeySource replaces a KeySource by ID.
+func (s *Storage) UpdateKeySource(updated KeySource) error {
+	sources, err := s.LoadKeySources()
+	if err != nil {
+		return err
+	}
+	found := false
+	for i := range sources {
+		if sources[i].ID == updated.ID {
+			sources[i] = updated
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("key source %s not found", updated.ID)
+	}
+	return s.SaveKeySources(sources)
+}
+
+// DeleteKeySource removes a KeySource by ID.
+func (s *Storage) DeleteKeySource(id string) error {
+	sources, err := s.LoadKeySources()
+	if err != nil {
+		return err
+	}
+	found := false
+	for i := range sources {
+		if sources[i].ID == id {
+			sources = append(sources[:i], sources[i+1:]...)
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("key source %s not found", id)
+	}
+	return s.SaveKeySources(sources)
+}
+
+// FindDuplicatePanel finds an existing panel-type KeySource with the same triplet.
+func (s *Storage) FindDuplicatePanel(panelID, email string, inboundID int) *KeySource {
+	sources, err := s.LoadKeySources()
+	if err != nil {
+		return nil
+	}
+	for i := range sources {
+		ks := &sources[i]
+		if ks.Type == "panel" && ks.PanelID == panelID && ks.ClientEmail == email && ks.InboundID == inboundID {
+			return ks
+		}
+	}
+	return nil
+}
+
+// FindDuplicateManual finds an existing manual KeySource with the same vless link.
+func (s *Storage) FindDuplicateManual(vlessLink string) *KeySource {
+	sources, err := s.LoadKeySources()
+	if err != nil {
+		return nil
+	}
+	for i := range sources {
+		ks := &sources[i]
+		if ks.Type == "manual" && strings.TrimSpace(ks.VlessLink) == strings.TrimSpace(vlessLink) {
+			return ks
+		}
+	}
+	return nil
+}
+
+// --- Subscription metadata ---
+
+// LoadSubscriptionsMeta reads subscription metadata (id/name/status/keys/updatedAt).
+func (s *Storage) LoadSubscriptionsMeta() ([]Subscription, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	data, err := os.ReadFile(s.subsMetaPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []Subscription{}, nil
+		}
+		return nil, fmt.Errorf("reading subscriptions meta: %w", err)
+	}
+
+	var subs []Subscription
+	if err := json.Unmarshal(data, &subs); err != nil {
+		return nil, fmt.Errorf("parsing subscriptions meta: %w", err)
+	}
+	return subs, nil
+}
+
+// SaveSubscriptionsMeta writes subscription metadata.
+func (s *Storage) SaveSubscriptionsMeta(subs []Subscription) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := json.MarshalIndent(subs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling subscriptions meta: %w", err)
+	}
+	if err := os.WriteFile(s.subsMetaPath, data, 0644); err != nil {
+		return fmt.Errorf("writing subscriptions meta: %w", err)
+	}
+	return nil
+}
+
+// GetSubMeta returns subscription metadata by name.
+func (s *Storage) GetSubMeta(name string) (*Subscription, bool) {
+	subs, err := s.LoadSubscriptionsMeta()
+	if err != nil {
+		return nil, false
+	}
+	for i := range subs {
+		if subs[i].Name == name {
+			sub := subs[i]
+			return &sub, true
+		}
+	}
+	return nil, false
+}
+
+// UpsertSubMeta inserts or replaces subscription metadata by name.
+func (s *Storage) UpsertSubMeta(sub Subscription) error {
+	subs, err := s.LoadSubscriptionsMeta()
+	if err != nil {
+		return err
+	}
+	found := false
+	for i := range subs {
+		if subs[i].Name == sub.Name {
+			subs[i] = sub
+			found = true
+			break
+		}
+	}
+	if !found {
+		subs = append(subs, sub)
+	}
+	return s.SaveSubscriptionsMeta(subs)
+}
+
+// DeleteSubMeta removes subscription metadata by name.
+func (s *Storage) DeleteSubMeta(name string) error {
+	subs, err := s.LoadSubscriptionsMeta()
+	if err != nil {
+		return err
+	}
+	found := false
+	for i := range subs {
+		if subs[i].Name == name {
+			subs = append(subs[:i], subs[i+1:]...)
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+	return s.SaveSubscriptionsMeta(subs)
+}
+
+// --- Subscription files ---
+
+// subscriptionFile returns the path for a subscription file.
+func (s *Storage) subscriptionFile(name string) string {
+	return filepath.Join(s.aggregatorDir, "configs-"+name+".txt")
+}
+
+// SubscriptionFileExists reports whether the file for name exists.
+func (s *Storage) SubscriptionFileExists(name string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, err := os.Stat(s.subscriptionFile(name))
+	return err == nil
+}
+
+// WriteSubscriptionFile writes the subscription file from key links.
+func (s *Storage) WriteSubscriptionFile(name string, keys []SubKey) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var lines []string
+	for _, k := range keys {
+		lines = append(lines, k.Link)
+	}
+	content := strings.Join(lines, "\n")
+	if content != "" {
+		content += "\n"
+	}
+	if err := os.WriteFile(s.subscriptionFile(name), []byte(content), 0644); err != nil {
+		return fmt.Errorf("writing subscription file: %w", err)
+	}
+	return nil
+}
+
+// RenameSubscriptionFile renames configs-{old}.txt → configs-{new}.txt.
+func (s *Storage) RenameSubscriptionFile(oldName, newName string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.Rename(s.subscriptionFile(oldName), s.subscriptionFile(newName)); err != nil {
+		return fmt.Errorf("renaming subscription file: %w", err)
+	}
+	return nil
+}
+
+// RemoveSubscriptionFile deletes the file for name (missing file is not an error).
+func (s *Storage) RemoveSubscriptionFile(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.Remove(s.subscriptionFile(name)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing subscription file: %w", err)
+	}
+	return nil
+}
+
+// SubscriptionFileMtime returns the file mtime as RFC3339, or "" if missing.
+func (s *Storage) SubscriptionFileMtime(name string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	info, err := os.Stat(s.subscriptionFile(name))
+	if err != nil {
+		return ""
+	}
+	return info.ModTime().UTC().Format("2006-01-02T15:04:05Z07:00")
+}
+
+// ListSubscriptions returns all subscriptions, merging metadata (KeySource refs,
+// status) with the actual files. Legacy files without metadata are reported with
+// manual keys (keySourceId=null) and status active.
 func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
+	metas := map[string]Subscription{}
+	metaList, err := s.loadSubsMetaLocked()
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range metaList {
+		metas[m.Name] = m
+	}
 
 	entries, err := os.ReadDir(s.aggregatorDir)
 	if err != nil {
@@ -147,6 +465,8 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 	}
 
 	var subs []Subscription
+	seen := map[string]bool{}
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -155,39 +475,112 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 		if !strings.HasPrefix(name, "configs-") || !strings.HasSuffix(name, ".txt") {
 			continue
 		}
-
-		// Extract client name: configs-{ClientName}.txt
 		clientName := strings.TrimPrefix(name, "configs-")
 		clientName = strings.TrimSuffix(clientName, ".txt")
-
-		sub := Subscription{
-			ID:   clientName,
-			Name: clientName,
-			Link: "", // Link isn't stored in the file
+		if clientName == "" {
+			continue
 		}
 
-		// Read keys from file
 		data, err := os.ReadFile(filepath.Join(s.aggregatorDir, name))
 		if err != nil {
 			continue
 		}
+		lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 
-		lines := strings.Split(string(data), "\n")
-		keys := make([]SubKey, 0)
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
+		if meta, ok := metas[clientName]; ok {
+			// Pair meta keys with file lines by index (file is truth for links).
+			keys := make([]SubKey, 0, len(lines))
+			for i, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				if i < len(meta.Keys) {
+					k := meta.Keys[i]
+					k.Link = line
+					keys = append(keys, k)
+				} else {
+					keys = append(keys, SubKey{ID: fmt.Sprintf("k-%d", i+1), Link: line})
+				}
 			}
-			keys = append(keys, SubKey{
-				ID:   fmt.Sprintf("k-%d", len(keys)+1),
-				Link: line,
+			sub := meta
+			if sub.ID == "" {
+				sub.ID = clientName
+			}
+			sub.Name = clientName
+			sub.Keys = keys
+			if sub.Status == "" {
+				sub.Status = "active"
+			}
+			info, _ := entry.Info()
+			if info != nil {
+				sub.FileMtime = info.ModTime().UTC().Format("2006-01-02T15:04:05Z07:00")
+			}
+			subs = append(subs, sub)
+		} else {
+			// Legacy subscription: no metadata, all keys manual.
+			keys := make([]SubKey, 0, len(lines))
+			for i, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				keys = append(keys, SubKey{ID: fmt.Sprintf("k-%d", i+1), Link: line})
+			}
+			info, _ := entry.Info()
+			mtime := ""
+			if info != nil {
+				mtime = info.ModTime().UTC().Format("2006-01-02T15:04:05Z07:00")
+			}
+			subs = append(subs, Subscription{
+				ID:        clientName,
+				Name:      clientName,
+				Status:    "active",
+				Keys:      keys,
+				UpdatedAt: mtime,
+				FileMtime: mtime,
 			})
 		}
-		sub.Keys = keys
+		seen[clientName] = true
+	}
+
+	// Metadata without files → drafts (or active with missing file).
+	for name, meta := range metas {
+		if seen[name] {
+			continue
+		}
+		sub := meta
+		if sub.ID == "" {
+			sub.ID = name
+		}
+		sub.Name = name
+		if sub.Status == "" {
+			sub.Status = "draft"
+		}
+		sub.FileMtime = ""
 		subs = append(subs, sub)
 	}
 
+	sort.Slice(subs, func(i, j int) bool {
+		return strings.ToLower(subs[i].Name) < strings.ToLower(subs[j].Name)
+	})
+
+	return subs, nil
+}
+
+// loadSubsMetaLocked reads subscriptions.json (caller must hold at least RLock).
+func (s *Storage) loadSubsMetaLocked() ([]Subscription, error) {
+	data, err := os.ReadFile(s.subsMetaPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []Subscription{}, nil
+		}
+		return nil, fmt.Errorf("reading subscriptions meta: %w", err)
+	}
+	var subs []Subscription
+	if err := json.Unmarshal(data, &subs); err != nil {
+		return nil, fmt.Errorf("parsing subscriptions meta: %w", err)
+	}
 	return subs, nil
 }
 
@@ -207,90 +600,12 @@ func (s *Storage) GetSubscription(name string) (*Subscription, error) {
 	return nil, fmt.Errorf("subscription %s not found", name)
 }
 
-// CreateSubscription creates a new subscription file
-func (s *Storage) CreateSubscription(req CreateSubscriptionRequest) (Subscription, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	filePath := filepath.Join(s.aggregatorDir, "configs-"+req.Name+".txt")
-
-	var lines []string
-	for _, k := range req.Keys {
-		lines = append(lines, k.Link)
-	}
-
-	content := strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		return Subscription{}, fmt.Errorf("writing subscription file: %w", err)
-	}
-
-	return Subscription{
-		ID:   req.Name,
-		Name: req.Name,
-		Keys: req.Keys,
-	}, nil
-}
-
-// UpdateSubscription updates a subscription file
-func (s *Storage) UpdateSubscription(name string, req UpdateSubscriptionRequest) (Subscription, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	filePath := filepath.Join(s.aggregatorDir, "configs-"+name+".txt")
-
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return Subscription{}, fmt.Errorf("subscription %s not found", name)
-	}
-
-	var lines []string
-	for _, k := range req.Keys {
-		lines = append(lines, k.Link)
-	}
-
-	content := strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		return Subscription{}, fmt.Errorf("writing subscription file: %w", err)
-	}
-
-	newName := name
-	if req.Name != "" {
-		newName = req.Name
-		// Rename file
-		newPath := filepath.Join(s.aggregatorDir, "configs-"+req.Name+".txt")
-		if err := os.Rename(filePath, newPath); err != nil {
-			return Subscription{}, fmt.Errorf("renaming subscription file: %w", err)
-		}
-	}
-
-	return Subscription{
-		ID:   newName,
-		Name: newName,
-		Keys: req.Keys,
-	}, nil
-}
-
-// DeleteSubscription removes a subscription file
-func (s *Storage) DeleteSubscription(name string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	filePath := filepath.Join(s.aggregatorDir, "configs-"+name+".txt")
-	if err := os.Remove(filePath); err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("subscription %s not found", name)
-		}
-		return fmt.Errorf("removing subscription file: %w", err)
-	}
-
-	return nil
-}
-
 // GetSubscriptionRaw returns the raw content of a subscription file
 func (s *Storage) GetSubscriptionRaw(name string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	filePath := filepath.Join(s.aggregatorDir, "configs-"+name+".txt")
+	filePath := s.subscriptionFile(name)
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
