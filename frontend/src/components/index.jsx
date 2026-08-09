@@ -321,7 +321,7 @@ export function NewSubModal({ onClose, onSubmit, existingNames, hint }) {
 }
 
 // KeySource details
-export function KSDetailsModal({ keySource, usedInSubs, inThisSub, onClose, onCopyKey, onDelete, onTest, testing }) {
+export function KSDetailsModal({ keySource, usedInSubs, inThisSub, onClose, onCopyKey, onDelete, onTest, testing, subKey }) {
   const ks = keySource;
   const manual = !ks || ks.type === 'manual';
 
@@ -339,7 +339,7 @@ export function KSDetailsModal({ keySource, usedInSubs, inThisSub, onClose, onCo
         : `❌ ${ks.lastTest.error || 'ошибка'} · ${fmtDateTime(ks.lastTest.at)}`)
     : '— тест не запускался';
 
-  const link = (ks && ks.cachedKey && ks.cachedKey.link) || (ks && ks.vlessLink) || (inThisSub && subKeyLink);
+  const link = (ks && ks.cachedKey && ks.cachedKey.link) || (ks && ks.vlessLink) || (subKey && subKey.link);
 
   const rows = [];
   if (!ks) {

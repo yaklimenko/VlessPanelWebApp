@@ -556,11 +556,12 @@ function AppInner() {
             keySource={keySource}
             usedInSubs={usedInSubs}
             inThisSub={inThisSub}
+            subKey={subKey}
             onClose={() => setKsDetails(null)}
             onCopyKey={copyKSKey}
             onDelete={() => setDeleteKS(keySource)}
             onTest={() => handleTestKS(keySource)}
-            testing={testingKs === keySource.id}
+            testing={keySource ? testingKs === keySource.id : false}
           />
         );
       })()}
