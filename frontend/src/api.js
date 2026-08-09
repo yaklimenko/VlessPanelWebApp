@@ -37,4 +37,15 @@ export const api = {
     return res.text();
   },
   testSubscription: (id) => request(`/subscriptions/${id}/test`, { method: 'POST' }),
+
+  // Key sources
+  listKeySources: () => request('/key-sources'),
+  createKeySource: (data) => request('/key-sources', { method: 'POST', body: JSON.stringify(data) }),
+  deleteKeySource: (id) => request(`/key-sources/${id}`, { method: 'DELETE' }),
+  getKeySourceKey: (id) => request(`/key-sources/${id}/key`),
+  testKeySource: (id) => request(`/key-sources/${id}/test`),
+  getKeySourceTraffic: (id) => request(`/key-sources/${id}/traffic`),
+
+  // Sync with aggregator
+  syncToAggregator: () => request('/sync', { method: 'POST' }),
 };

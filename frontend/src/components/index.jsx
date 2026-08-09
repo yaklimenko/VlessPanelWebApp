@@ -7,12 +7,13 @@ export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const idCounter = useRef(0);
 
-  const showToast = useCallback((message, duration = 2500) => {
+  const showToast = useCallback((message, type, duration = 3000) => {
     const id = ++idCounter.current;
-    setToasts(prev => [...prev, { id, message }]);
+    setToasts(prev => [...prev, { id, message, type }]);
+    const ms = typeof duration === 'number' && duration > 0 ? duration : 3000;
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, duration);
+    }, ms);
   }, []);
 
   return (
@@ -20,7 +21,7 @@ export function ToastProvider({ children }) {
       {children}
       <div className="toast-container">
         {toasts.map(t => (
-          <div key={t.id} className="toast">{t.message}</div>
+          <div key={t.id} className={`toast ${t.type || ''}`}>{t.message}</div>
         ))}
       </div>
     </ToastContext.Provider>
@@ -32,7 +33,7 @@ export function useToast() {
 }
 
 // ─── Modal ───
-export function Modal({ title, children, onClose }) {
+export function Modal({ title, children, onClose, wide }) {
   useEffect(() => {
     const handleEsc = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handleEsc);
@@ -41,7 +42,7 @@ export function Modal({ title, children, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
+      <div className={`modal-content ${wide ? 'modal-wide' : ''}`} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{title}</h3>
           <button className="btn btn-icon modal-close" onClick={onClose}>✕</button>
@@ -54,11 +55,56 @@ export function Modal({ title, children, onClose }) {
   );
 }
 
+// ─── Formatting helpers ───
+export function fmtBytes(b) {
+  if (b == null || isNaN(b)) return '—';
+  const u = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  let i = 0, v = Number(b);
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return (v >= 100 ? v.toFixed(0) : v.toFixed(1)) + u[i];
+}
+
+export function fmtDate(isoOrMs) {
+  if (!isoOrMs) return '—';
+  let d;
+  if (typeof isoOrMs === 'number' || /^\d+$/.test(String(isoOrMs))) {
+    d = new Date(Number(isoOrMs));
+  } else if (isoOrMs.length === 10) {
+    d = new Date(isoOrMs + 'T00:00:00');
+  } else {
+    d = new Date(isoOrMs);
+  }
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+export function fmtShortDate(isoOrMs) {
+  if (!isoOrMs) return '—';
+  let d;
+  if (typeof isoOrMs === 'number' || /^\d+$/.test(String(isoOrMs))) {
+    d = new Date(Number(isoOrMs));
+  } else if (isoOrMs.length === 10) {
+    d = new Date(isoOrMs + 'T00:00:00');
+  } else {
+    d = new Date(isoOrMs);
+  }
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+}
+
+export function fmtDateTime(s) {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 // ─── Header ───
-export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onDeletePanel }) {
+export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onDeletePanel, onSyncAll, syncing }) {
   return (
     <header className="header">
       <div className="header-left">
+        <span className="app-title">Vless<span className="accent">Panel</span></span>
         {panels.length === 0 ? (
           <span className="no-panels-text">Нет панелей — добавьте первую</span>
         ) : (
@@ -74,196 +120,377 @@ export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onD
         <button className="btn btn-primary btn-sm" onClick={onAddPanel}>+ Панель</button>
       </div>
       <div className="header-right">
-        <span className="app-title"><span className="accent">Vless</span>Panel</span>
-        <span className="app-version">v0.1</span>
+        <button className="btn btn-sm btn-success" onClick={onSyncAll} disabled={syncing}>
+          {syncing ? '⟳ Синхронизация…' : '⟳ Синк с агрегатором'}
+        </button>
+        <span className="app-version">v0.9.0</span>
       </div>
     </header>
   );
 }
 
-// ─── ClientCard ───
-export function ClientCard({ client, onCopyInboundKey, onClick }) {
-  return (
-    <div className="client-card" onClick={() => onClick && onClick(client)}>
-      <div className="client-card-top">
-        <div className="client-name">{client.email}</div>
-      </div>
-      <div className="keys-list" style={{ marginTop: 6 }}>
-        {(client.inbounds || []).map((inb, idx) => (
-          <span
-            key={idx}
-            className="key-chip"
-            onClick={(e) => { e.stopPropagation(); onCopyInboundKey && onCopyInboundKey(client.email, inb); }}
-          >{inb}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
+// ─── Client card with inbound chips (left column) ───
+export function ClientCard({ client, inbounds, keySources, activeSubKeys, onChipClick, onOpenClient, panelName }) {
+  const chipInbounds = (inbounds || []).filter(ib => (client.inboundIds || []).includes(ib.id));
 
-// ─── SubscriptionCard ───
-export function SubscriptionCard({
-  subscription,
-  isOpen,
-  onToggle,
-  onCopyLink,
-  onRefresh,
-  onDelete,
-  onCopyKey,
-  onDeleteKey,
-  onAddKey,
-  newKeyValue,
-  onNewKeyChange,
-  onNewKeyConfirm,
-  onNewKeyCancel,
-  onTest,
-  showAddForm,
-  testing,
-  testResults,
-}) {
-  const parsedResults = parseTestResults(testResults || subscription.testResults);
+  const statusFor = (inboundId) => {
+    const ks = (keySources || []).find(k =>
+      k.type === 'panel' && k.clientEmail === client.email && k.inboundId === inboundId);
+    return ks || null;
+  };
+
+  const expiryMs = client.expiryTime || 0;
+  const expiryStr = expiryMs > 0 ? ' · до ' + fmtShortDate(expiryMs) : '';
+  const trafficStr = (client.up || client.down) ? ` · ↑${fmtBytes(client.up)} ↓${fmtBytes(client.down)}` : '';
 
   return (
-    <div className={`sub-item ${isOpen ? 'open' : ''}`}>
-      <div className="sub-header" onClick={onToggle}>
+    <div className="client-card" onClick={() => onOpenClient && onOpenClient(client)}>
+      <div className="client-top">
         <div>
-          <span className="sub-arrow">▶</span>
-          <span className="sub-title">{subscription.name}</span>
-          {parsedResults && (
-            <span className="badge" style={{ marginLeft: 6 }}>
-              {parsedResults.okCount}/{parsedResults.totalCount} ✅
-            </span>
-          )}
-        </div>
-        <div className="sub-actions" onClick={e => e.stopPropagation()}>
-          <button className="btn btn-xs btn-icon copy-sub-btn" onClick={onCopyLink} title="Копировать ссылку">📋</button>
-          <button className="btn btn-xs btn-icon refresh-sub-btn" onClick={onRefresh} title="Обновить">🔄</button>
-          <button className="btn btn-xs btn-icon btn-danger delete-sub-btn" onClick={onDelete} title="Удалить">🗑</button>
+          <div className="client-name">
+            {client.email}
+            {client.enable ? <span className="badge ok">вкл</span> : <span className="badge">выкл</span>}
+          </div>
+          <div className="client-inbounds">
+            {chipInbounds.length} {chipInbounds.length === 1 ? 'инбаунд' : (chipInbounds.length < 5 ? 'инбаунда' : 'инбаундов')}
+            {expiryStr}{trafficStr}
+          </div>
         </div>
       </div>
-      <div className="sub-body">
-        {(subscription.keys || []).map(k => (
-          <div key={k.id} className="sub-key-row">
-            <span className="mono" title={k.link}>{k.link}</span>
-            <span
-              className="copy-small copy-vless-btn"
-              onClick={() => onCopyKey(k)}
-            >📋</span>
-            <span
-              className="sub-key-del"
-              onClick={() => onDeleteKey(k.id)}
-              title="Удалить ключ"
-            >🗑</span>
-          </div>
-        ))}
-        <div className="sub-add-key-wrap">
-          {!showAddForm ? (
+      <div className="client-chips">
+        {chipInbounds.length === 0 ? (
+          <div className="client-noinb">нет инбаундов — привяжите на панели</div>
+        ) : chipInbounds.map(ib => {
+          const ks = statusFor(ib.id);
+          const st = ks ? ks.status : 'ok'; // без KeySource — статус неизвестен, показываем как ok
+          const added = !!(ks && activeSubKeys && activeSubKeys.has(ks.id));
+          return (
             <button
-              className="btn btn-sm btn-primary sub-add-key-btn"
-              onClick={onAddKey}
-            >➕ Добавить ключ</button>
-          ) : (
-            <div className="sub-add-key-form">
-              <div className="sub-add-key-form-inner">
-                <input
-                  type="text"
-                  className="sub-add-key-input"
-                  placeholder="Вставьте vless:// или vmess:// ссылку..."
-                  value={newKeyValue}
-                  onChange={e => onNewKeyChange(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') onNewKeyConfirm(); }}
-                  autoFocus
-                />
-                <button className="btn btn-sm btn-success" onClick={onNewKeyConfirm}>➕ Добавить</button>
-                <button className="btn btn-sm" onClick={onNewKeyCancel}>Отмена</button>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="test-section">
-          <button
-            className="btn btn-sm btn-success test-btn"
-            onClick={onTest}
-            disabled={testing}
-          >{testing ? '⏳ Тестируем...' : '▶ Тест VlessSubTest'}</button>
-          {parsedResults && parsedResults.rows.length > 0 && (
-            <div className="test-results">
-              <table className="test-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>IP</th>
-                    <th>Remarks</th>
-                    <th>Status</th>
-                    <th>YT</th>
-                    <th>IG</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {parsedResults.rows.map((row, i) => (
-                    <tr key={i}>
-                      <td>{row.keyIdx}</td>
-                      <td>{row.ip}</td>
-                      <td>{row.remark}</td>
-                      <td className={row.status === 'OK' ? 'ok' : 'failed'}>
-                        {row.status || 'FAILED'}
-                      </td>
-                      <td className={row.youtube === 'OK' ? 'ok' : 'failed'}>
-                        {row.youtube || '-'}
-                      </td>
-                      <td className={row.instagram === 'OK' ? 'ok' : 'failed'}>
-                        {row.instagram || '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+              key={ib.id}
+              className={`inb-chip${added ? ' added' : ''}`}
+              title={`${panelName} · ${ib.remark} :${ib.port} · ${client.email}${ks && ks.expireDate ? ' · до ' + fmtDate(ks.expireDate) : ''}${added ? '\nуже добавлено в подписку' : ''}`}
+              onClick={(e) => { e.stopPropagation(); onChipClick && onChipClick(client, ib); }}
+            >
+              <span className={`idot ${st}`}></span>
+              <span className="inb-name">{ib.remark}</span>
+              <span className="inb-port">:{ib.port}</span>
+              {added && <span className="inb-ok">✓</span>}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function parseTestResults(str) {
-  if (!str) return null;
+// ─── KeySource chip (right column) ───
+export function KSChip({ subKey, keySource, onOpen, onCopy, onDelete, onTest, testing }) {
+  const ks = keySource || null;
 
-  if (typeof str === 'object' && str.results) {
-    return {
-      okCount: str.ok || 0,
-      totalCount: str.total || 0,
-      rows: str.results.map(r => ({
-        keyIdx: r.key_idx !== undefined ? r.key_idx : r.keyIdx,
-        ip: r.ip || '',
-        remark: r.remark || '',
-        status: r.status || '',
-        youtube: r.youtube || '-',
-        instagram: r.instagram || '-',
-      })),
-    };
+  // manual / legacy — grey chip
+  if (!ks) {
+    return (
+      <div className="ks-chip ks-manual" title="manual · клик — детали" onClick={onOpen}>
+        <span className="ks-dot manual"></span>
+        <span className="ks-label">
+          <span className="ks-server ell">manual</span>
+          <span className="ks-sep">·</span>
+          <span className="ks-inbound ell">{shortLink(subKey.link)}</span>
+        </span>
+        <span className="ks-meta">
+          <span className="ks-status manual">manual</span>
+          <button className="ks-ico js-copy" title="Скопировать ключ" onClick={(e) => { e.stopPropagation(); onCopy(subKey.link); }}>⧉</button>
+          <button className="ks-ico del js-del" title="Удалить из подписки" onClick={(e) => { e.stopPropagation(); onDelete(subKey); }}>×</button>
+        </span>
+      </div>
+    );
   }
 
-  const lines = str.split('\n').filter(l => l.trim());
-  const summaryLine = lines[0] || '';
-  const m = summaryLine.match(/(\d+)\/(\d+)/);
-  const okCount = m ? parseInt(m[1]) : 0;
-  const totalCount = m ? parseInt(m[2]) : 0;
-  const rows = lines.filter(l => l.startsWith('keyIdx:')).map(r => {
-    const parts = r.split('|').map(s => s.trim());
-    return {
-      keyIdx: parts[0]?.replace(/^keyIdx:\s*/, '') || '',
-      ip: parts[1] || '',
-      remark: parts[2] || '',
-      status: parts[3] || '',
-      youtube: '-',
-      instagram: '-',
-    };
-  });
-  return { okCount, totalCount, rows };
+  const st = ks.status || 'ok';
+  const cls = 'ks-chip ' + (st === 'ok' ? '' : st === 'expired' ? 'ks-expired' : st === 'manual' ? 'ks-manual' : 'ks-missing');
+  const statusTxt =
+    st === 'ok' ? <span className="ks-status ok">ok</span>
+    : st === 'expired' ? <span className="ks-status expired">закончился</span>
+    : st === 'manual' ? <span className="ks-status manual">manual</span>
+    : <span className="ks-status missing">{st === 'missing' ? 'missing' : 'панель недоступна'}</span>;
+
+  let center = null;
+  if (st === 'ok') {
+    center = (
+      <>
+        <span className="ks-traffic" title="Трафик (clientStats 3X-UI)">
+          ↑{fmtBytes(ks.traffic && ks.traffic.up)} ↓{fmtBytes(ks.traffic && ks.traffic.down)}
+        </span>
+        {ks.expireDate && <span className="ks-expiry" title="Окончание">до {fmtShortDate(ks.expireDate)}</span>}
+      </>
+    );
+  } else if (st === 'expired') {
+    center = (
+      <>
+        <svg className="ico-clock" width="14" height="14" viewBox="0 0 16 16" title={`Срок истёк ${fmtDate(ks.expireDate)}`}>
+          <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.6"/>
+          <path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+        </svg>
+        {ks.expireDate && <span className="ks-expiry">истёк {fmtShortDate(ks.expireDate)}</span>}
+      </>
+    );
+  } else {
+    center = (
+      <>
+        <svg className="ico-warn" width="14" height="14" viewBox="0 0 16 16">
+          <path d="M8 1.5 15 14H1z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+          <path d="M8 6v3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+          <circle cx="8" cy="12" r="0.9" fill="currentColor"/>
+        </svg>
+        <span className="ks-note">{ks.error || (st === 'missing' ? 'клиент/инбаунд не найден' : 'панель недоступна')}</span>
+      </>
+    );
+  }
+
+  const testRes = ks.lastTest;
+  let testHtml;
+  if (testing) {
+    testHtml = <span className="ks-testres run"><span className="spin small"></span> тест…</span>;
+  } else {
+    let resTxt = '', resCls = '';
+    if (testRes) {
+      resCls = testRes.status === 'ok' ? 'ok' : 'fail';
+      resTxt = testRes.status === 'ok'
+        ? '✓ ' + (testRes.ms != null ? testRes.ms + ' мс' : 'ok')
+        : '✗ ' + (testRes.error || 'ошибка');
+    }
+    testHtml = (
+      <>
+        <button className="ks-ico js-test" title="Тест ключа (test-single)" onClick={(e) => { e.stopPropagation(); onTest(ks); }}>🧪</button>
+        {resTxt && <span className={`ks-testres ${resCls}`} title="Тест демоном vlesssubtest">{resTxt}</span>}
+      </>
+    );
+  }
+
+  return (
+    <div className={cls} data-ks={ks.id} title="Клик — детали KeySource" onClick={onOpen}>
+      <span className={`ks-dot ${st === 'manual' ? 'manual' : st === 'expired' ? 'expired' : st === 'ok' ? 'ok' : 'missing'}`}></span>
+      <span className="ks-label">
+        <span className="ks-server">{ks.panelName || '?'}</span>
+        <span className="ks-sep">·</span>
+        <span className="ks-inbound">{ks.inboundRemark || '—'}{ks.inboundPort ? ' :' + ks.inboundPort : ''}</span>
+        <span className="ks-sep">·</span>
+        <span className="ks-email">{ks.clientEmail}</span>
+      </span>
+      <span className="ks-meta">
+        {statusTxt}
+        {center}
+        {testHtml}
+        <button className="ks-ico js-copy" title="Скопировать vless-ключ" onClick={(e) => { e.stopPropagation(); onCopy(ks); }}>⧉</button>
+        <button className="ks-ico del js-del" title="Удалить из подписки" onClick={(e) => { e.stopPropagation(); onDelete(subKey); }}>×</button>
+      </span>
+    </div>
+  );
 }
 
-// ─── Modal forms ───
+function shortLink(link) {
+  if (!link) return '—';
+  return link.length > 60 ? link.slice(0, 60) + '…' : link;
+}
+
+// ─── Modals ───
+
+// New subscription (name + duplicate check)
+export function NewSubModal({ onClose, onSubmit, existingNames, hint }) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+
+  const submit = () => {
+    const n = name.trim();
+    if (!n) { setError('Укажите имя подписки'); return; }
+    if (existingNames.some(x => x.toLowerCase() === n.toLowerCase())) {
+      setError(`Подписка с именем «${n}» уже существует`);
+      return;
+    }
+    onSubmit(n);
+  };
+
+  return (
+    <Modal title="➕ Новая подписка" onClose={onClose}>
+      <div className="modal-form">
+        <div className="form-group">
+          <label htmlFor="newSubName">Имя подписки</label>
+          <input id="newSubName" value={name} onChange={e => setName(e.target.value)}
+            placeholder="Например: FriendsFamily, perMonth…" maxLength="60" autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
+          {error && <div className="form-error">⚠ {error}</div>}
+          <div className="form-hint">Имя станет частью файла и ссылки: <code className="mono">configs-{name || '{имя}'}.txt</code> · <code className="mono">/sub/{name || '{имя}'}</code></div>
+          {hint && <div className="form-hint">{hint}</div>}
+        </div>
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>Отмена</button>
+          <button className="btn btn-primary" onClick={submit}>Создать черновик</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// KeySource details
+export function KSDetailsModal({ keySource, usedInSubs, inThisSub, onClose, onCopyKey, onDelete, onTest, testing }) {
+  const ks = keySource;
+  const manual = !ks || ks.type === 'manual';
+
+  const statusBadge = !ks ? <span className="badge">manual</span> : (
+    ks.status === 'ok' ? <span className="badge ok">● ok</span>
+    : ks.status === 'expired' ? <span className="badge danger">🕐 закончился</span>
+    : ks.status === 'panel_unreachable' ? <span className="badge warn">▲ панель недоступна</span>
+    : ks.status === 'missing' ? <span className="badge warn">▲ missing — не извлечётся</span>
+    : <span className="badge">manual</span>
+  );
+
+  const lastTest = ks && ks.lastTest
+    ? (ks.lastTest.status === 'ok'
+        ? `✅ OK за ${ks.lastTest.ms || '?'} мс · ${fmtDateTime(ks.lastTest.at)}`
+        : `❌ ${ks.lastTest.error || 'ошибка'} · ${fmtDateTime(ks.lastTest.at)}`)
+    : '— тест не запускался';
+
+  const link = (ks && ks.cachedKey && ks.cachedKey.link) || (ks && ks.vlessLink) || (inThisSub && subKeyLink);
+
+  const rows = [];
+  if (!ks) {
+    rows.push(['Тип', 'manual (хранит строку vless-ключа)']);
+    rows.push(['Статус', statusBadge]);
+    rows.push(['Последний тест', lastTest]);
+    rows.push(['Генерация', 'включается всегда, не трогается при перегенерации']);
+  } else if (ks.type === 'manual') {
+    rows.push(['Тип', 'KeySource · manual']);
+    rows.push(['Label', ks.label || 'manual']);
+    rows.push(['Статус', statusBadge]);
+    rows.push(['Последний тест', lastTest]);
+    rows.push(['Генерация', 'включается всегда']);
+    rows.push(['Используется', usedInSubs > 0 ? `в ${usedInSubs} ${usedInSubs === 1 ? 'подписке' : 'подписках'}` : 'нигде']);
+  } else {
+    rows.push(['Тип', 'KeySource · panel (3X-UI)']);
+    rows.push(['Сервер', `${ks.panelName || '—'}`]);
+    rows.push(['Инбаунд', `${ks.inboundRemark || '—'}${ks.inboundPort ? ' :' + ks.inboundPort : ''}`]);
+    rows.push(['Клиент', ks.clientEmail || '—']);
+    rows.push(['Статус', statusBadge]);
+    if (ks.expireDate) rows.push(['Окончание', fmtDate(ks.expireDate)]);
+    if (ks.traffic) rows.push(['Трафик (up/down)', `↑ ${fmtBytes(ks.traffic.up)} · ↓ ${fmtBytes(ks.traffic.down)}`]);
+    rows.push(['Последний тест', lastTest]);
+    rows.push(['Кеш ключа', ks.cachedKey ? `получен ${fmtDateTime(ks.cachedKey.fetchedAt)} (TTL 10 мин)` : 'нет кеша — ключ извлечётся при генерации']);
+    rows.push(['Используется', usedInSubs > 0 ? `в ${usedInSubs} ${usedInSubs === 1 ? 'подписке' : 'подписках'}` : 'нигде']);
+  }
+
+  return (
+    <Modal title={`🔑 ${ks ? (ks.label || `${ks.panelName || ''} · ${ks.clientEmail || 'manual'}`) : 'manual'}`} onClose={onClose}>
+      <div className="modal-form">
+        <div className="ks-info-grid">
+          {rows.map(([k, v]) => (
+            <React.Fragment key={k}>
+              <span className="k">{k}</span>
+              <span className="v">{v}</span>
+            </React.Fragment>
+          ))}
+        </div>
+        {link && (
+          <div className="ks-keybox mono" title={link}>{link.length > 92 ? link.slice(0, 92) + '…' : link}</div>
+        )}
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>Закрыть</button>
+          {!manual && (
+            <button className="btn" style={{ color: 'var(--danger)' }} onClick={onDelete}>Удалить KeySource</button>
+          )}
+          {!manual && (
+            <button className="btn" onClick={onTest} disabled={testing}>
+              {testing ? '⏳ Тест…' : '🧪 Тест ключа'}
+            </button>
+          )}
+          <button className="btn btn-success" onClick={() => onCopyKey(ks)}>⧉ Скопировать vless-ключ</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// Delete subscription confirmation
+export function DeleteSubModal({ sub, onClose, onConfirm }) {
+  const n = (sub && sub.keys ? sub.keys.length : 0);
+  return (
+    <Modal title="🗑 Удалить подписку" onClose={onClose}>
+      <div className="danger-box">
+        Точно удалить подписку <b>«{sub.name}»</b>?
+        <br />
+        Будут удалены {n} {n === 1 ? 'ключ' : (n < 5 ? 'ключа' : 'ключей')}
+        {sub.status === 'active' ? <> и локальный файл <code className="mono">configs-{sub.name}.txt</code></> : ' (файл не создан)'}.
+      </div>
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>Отмена</button>
+        <button className="btn btn-danger" onClick={onConfirm}>Удалить</button>
+      </div>
+    </Modal>
+  );
+}
+
+// Delete KeySource confirmation (used in N subscriptions warning)
+export function DeleteKSModal({ keySource, usedInSubs, subNames, onClose, onConfirm }) {
+  const label = keySource ? (keySource.label || `${keySource.panelName || ''} · ${keySource.clientEmail || keySource.id}`) : '';
+  return (
+    <Modal title="🗑 Удалить KeySource" onClose={onClose}>
+      <div className="modal-form">
+        {usedInSubs > 0 ? (
+          <div className="warn-box">
+            ⚠ KeySource <b>{label}</b> используется в <b>{usedInSubs}</b> {usedInSubs === 1 ? 'подписке' : 'подписках'}:
+            {(subNames || []).map(s => ` «${s}»`).join(',')}.
+            <br />
+            Он будет удалён из всех. Конвертации в manual нет — при необходимости скопируйте ключ заранее.
+          </div>
+        ) : (
+          <div className="form-hint">KeySource не используется ни в одной подписке.</div>
+        )}
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>Отмена</button>
+          <button className="btn btn-danger" onClick={onConfirm}>Точно удалить</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// Generation report (partial success)
+export function ReportModal({ subName, report, included, skipped, onClose }) {
+  return (
+    <Modal title={`📄 ${subName} — результат`} onClose={onClose}>
+      <div className="modal-form">
+        <div className="report-list">
+          {(report || []).map((r, i) => (
+            <div key={i} className={`report-item ${r.kind}`}>
+              <span className="mark">
+                {r.kind === 'ok' ? '✅' : r.kind === 'manual' ? '🔘' : '⏭'}
+              </span>
+              <span>
+                {r.label}
+                {r.kind === 'ok' && <span className="why"> — ключ извлечён{r.ms ? ` (${r.ms} мс)` : ''}</span>}
+                {r.kind === 'manual' && <span className="why"> — manual, сохранён как есть</span>}
+                {r.kind === 'skip' && <span className="why"> — {r.why}</span>}
+              </span>
+            </div>
+          ))}
+        </div>
+        {(included != null || skipped != null) && (
+          <div className="form-hint">
+            Включено: <b>{included || 0}</b> · пропущено: <b>{skipped || 0}</b>
+          </div>
+        )}
+        <div className="form-hint">
+          Файл: <code className="mono">configs-{subName}.txt</code> · ссылка: <code className="mono">https://example.com/sub/{subName}</code>
+          <br />Не забудьте синхронизировать с агрегатором.
+        </div>
+        <div className="modal-actions">
+          <button className="btn btn-primary" onClick={onClose}>Понятно</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Panel / client management modals (kept from previous UI) ───
 export function AddPanelModal({ onClose, onSubmit }) {
   const [name, setName] = React.useState('');
   const [url, setUrl] = React.useState('');
@@ -359,7 +586,7 @@ export function EditClientModal({ client, allInbounds, onClose, onAttachInbound,
       <div className="modal-form">
         <div className="form-group">
           <label>Email</label>
-          <input type="text" value={client.email} disabled style={{opacity: 0.6}} />
+          <input type="text" value={client.email} disabled style={{ opacity: 0.6 }} />
         </div>
 
         <div className="form-group">
@@ -402,32 +629,6 @@ export function EditClientModal({ client, allInbounds, onClose, onAttachInbound,
           <button className="btn" onClick={onClose}>Отмена</button>
         </div>
       </div>
-    </Modal>
-  );
-}
-
-export function AddSubscriptionModal({ onClose, onSubmit }) {
-  const [name, setName] = React.useState('');
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!name) return;
-    onSubmit({ name, keys: [] });
-  };
-
-  return (
-    <Modal title="📡 Новая подписка" onClose={onClose}>
-      <form onSubmit={handleSubmit} className="modal-form">
-        <div className="form-group">
-          <label>Имя клиента</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="ExampleClient" required autoFocus />
-        </div>
-        <p className="form-hint">Будет создан файл config-{name || '{ClientName}'}.txt в папке агрегатора</p>
-        <div className="modal-actions">
-          <button type="submit" className="btn btn-primary">📡 Создать</button>
-          <button type="button" className="btn" onClick={onClose}>Отмена</button>
-        </div>
-      </form>
     </Modal>
   );
 }
