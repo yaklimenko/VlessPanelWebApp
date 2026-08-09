@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /app/vlesspanel .
 
 # Stage 3: Runtime
 FROM alpine:latest
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata rsync openssh-client bash
 
 COPY --from=backend-builder /app/vlesspanel /app/vlesspanel
 COPY --from=frontend-builder /app/frontend/dist /app/static
