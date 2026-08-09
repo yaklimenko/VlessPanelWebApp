@@ -13,9 +13,9 @@ type Panel struct {
 
 // Inbound represents a 3X-UI inbound
 type Inbound struct {
-	ID      int    `json:"id"`
-	Remark  string `json:"remark"`
-	Port    int    `json:"port"`
+	ID       int    `json:"id"`
+	Remark   string `json:"remark"`
+	Port     int    `json:"port"`
 	Protocol string `json:"protocol"`
 	Settings string `json:"settings"`
 }
@@ -33,23 +33,23 @@ type Client struct {
 
 // VLESSKey represents a VLESS connection key
 type VLESSKey struct {
-	Label    string `json:"label"`
-	Protocol string `json:"protocol"`
-	Link     string `json:"link"`
-	Inbound  string `json:"inbound"`
-	Server   string `json:"server"`
-	Port     int    `json:"port"`
-	Security string `json:"security"`
+	Label     string `json:"label"`
+	Protocol  string `json:"protocol"`
+	Link      string `json:"link"`
+	Inbound   string `json:"inbound"`
+	Server    string `json:"server"`
+	Port      int    `json:"port"`
+	Security  string `json:"security"`
 	Transport string `json:"transport"`
 }
 
 // Subscription represents a named collection of VLESS keys
 type Subscription struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Keys        []SubKey  `json:"keys"`
-	Link        string    `json:"link,omitempty"`
-	TestResults string    `json:"testResults,omitempty"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Keys        []SubKey `json:"keys"`
+	Link        string   `json:"link,omitempty"`
+	TestResults string   `json:"testResults,omitempty"`
 }
 
 // SubKey is a single key within a subscription
@@ -155,24 +155,25 @@ type XUIInbound struct {
 
 // XUIStreamSettings represents streamSettings in a 3X-UI inbound
 type XUIStreamSettings struct {
-	Network         string             `json:"network"`
-	Security        string             `json:"security"`
+	Network         string              `json:"network"`
+	Security        string              `json:"security"`
 	RealitySettings *XUIRealitySettings `json:"realitySettings,omitempty"`
 }
 
 // XUIRealitySettings represents realitySettings in streamSettings
 type XUIRealitySettings struct {
-	ServerNames []string                 `json:"serverNames,omitempty"`
-	ShortIds    []string                 `json:"shortIds,omitempty"`
+	ServerNames []string                  `json:"serverNames,omitempty"`
+	ShortIds    []string                  `json:"shortIds,omitempty"`
 	Settings    *XUIRealityClientSettings `json:"settings,omitempty"`
 }
 
 // XUIRealityClientSettings represents the nested settings inside realitySettings
 type XUIRealityClientSettings struct {
-	PublicKey   string `json:"publicKey,omitempty"`
-	Fingerprint string `json:"fingerprint,omitempty"`
-	ServerName  string `json:"serverName,omitempty"`
-	SpiderX     string `json:"spiderX,omitempty"`
+	PublicKey     string `json:"publicKey,omitempty"`
+	Fingerprint   string `json:"fingerprint,omitempty"`
+	ServerName    string `json:"serverName,omitempty"`
+	SpiderX       string `json:"spiderX,omitempty"`
+	Mldsa65Verify string `json:"mldsa65Verify,omitempty"`
 }
 
 // XUIResponse is a generic 3X-UI API response
@@ -184,8 +185,8 @@ type XUIResponse struct {
 
 // XUIClientSettings represents the settings JSON for a client
 type XUIClientSettings struct {
-	Email    string `json:"email"`
-	Flow     string `json:"flow,omitempty"`
-	ID       string `json:"id"`
-	Level    int    `json:"level,omitempty"`
+	Email string `json:"email"`
+	Flow  string `json:"flow,omitempty"`
+	ID    string `json:"id"`
+	Level int    `json:"level,omitempty"`
 }
