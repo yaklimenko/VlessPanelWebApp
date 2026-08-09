@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -77,12 +78,19 @@ func main() {
 	staticDir := config.StaticDir
 	if _, err := os.Stat(staticDir); err == nil {
 		fileServer := http.FileServer(http.Dir(staticDir))
-		r.Handle("/*", fileServer)
-
-		// Also serve index.html for SPA routing
-		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		// SPA fallback: serve real files, otherwise index.html
+		r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := strings.TrimPrefix(r.URL.Path, "/")
+			if path == "" || path == "index.html" {
+				http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
+				return
+			}
+			if _, err := os.Stat(filepath.Join(staticDir, path)); err == nil {
+				fileServer.ServeHTTP(w, r)
+				return
+			}
 			http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
-		})
+		}))
 	} else {
 		log.Printf("Static directory %s not found, API-only mode", staticDir)
 	}
