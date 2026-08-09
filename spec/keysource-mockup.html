@@ -100,7 +100,8 @@ button { cursor: pointer; }
 .badge.accent { background: var(--accent-muted); color: var(--accent); }
 
 /* ═══════════ Левая колонка: панели → клиенты → чипсы ═══════════ */
-.panel-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+.panel-select { width: 100%; margin-bottom: 10px; padding: 7px 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; cursor: pointer; }
+.panel-select:focus { border-color: var(--accent); outline: none; }
 .panel-tab {
   display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
   border: 1px solid var(--border); background: var(--surface); border-radius: 14px;
@@ -887,14 +888,14 @@ function renderLeft() {
   panel.clients.forEach(c => totalKeys += c.inbounds.length);
   $('#panelKeysCount').textContent = totalKeys + ' ключей';
 
-  const tabsHtml = PANELS.map(p => {
-    const active = p.id === state.panelId ? ' active' : '';
+  const sortedPanels = [...PANELS].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  const tabsHtml = sortedPanels.map(p => {
     const cnt = p.clients.reduce((a, c) => a + c.inbounds.length, 0);
-    return `<button class="panel-tab${active}" data-panel="${p.id}" title="${esc(p.name)} · ${p.host}">
-      <span class="pdot${p.reachable ? '' : ' off'}"></span>${esc(p.name)}<span class="cnt">${cnt}</span></button>`;
+    const dot = p.reachable ? '●' : '○';
+    return `<option value="${p.id}"${p.id === state.panelId ? ' selected' : ''}>${dot} ${esc(p.name)} · ${cnt}</option>`;
   }).join('');
 
-  let bodyHtml = `<div class="panel-tabs">${tabsHtml}</div>`;
+  let bodyHtml = `<select class="panel-select" id="panelSelect">${tabsHtml}</select>`;
 
   bodyHtml += `<div class="search-wrap"><span class="search-icon">🔍</span>
     <input id="clientSearch" type="text" placeholder="Поиск клиентов и инбаундов…" value="${esc(state.search)}"></div>`;
@@ -940,7 +941,8 @@ function renderLeft() {
   body.innerHTML = bodyHtml;
   $('#panelKeysCount').textContent = totalKeys + ' ключей';
 
-  body.querySelectorAll('.panel-tab').forEach(t => t.addEventListener('click', () => switchPanel(t.dataset.panel)));
+  const psel = body.querySelector('#panelSelect');
+  if (psel) psel.addEventListener('change', () => switchPanel(psel.value));
   const inp = body.querySelector('#clientSearch');
   if (inp) inp.addEventListener('input', (e) => { state.search = e.target.value; renderLeft(); });
   body.querySelectorAll('.inb-chip').forEach(ch => ch.addEventListener('click', () => {
