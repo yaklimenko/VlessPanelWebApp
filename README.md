@@ -64,7 +64,7 @@ VlessPanelWebApp/
 ├── Dockerfile                    # multi-stage: node → golang → alpine runtime
 ├── docker-compose.yml            # vlesspanel (:9090→8080) + vlesssubtest (:7070), сеть vlesspanel-net
 ├── AGENTS.md                     # процедура пересборки и деплоя
-└── badgoodvless.txt              # заметки о различиях ключей (панель vs 3X-UI)
+
 ```
 
 ## Требования
