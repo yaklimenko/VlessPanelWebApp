@@ -8,6 +8,8 @@ import {
   fmtDate, fmtShortDate, fmtDateTime,
 } from './components';
 
+const panelHost = (p) => { try { return new URL(p.url).hostname; } catch { return p.url || ''; } };
+
 function AppInner() {
   const showToast = useToast();
 
@@ -393,7 +395,7 @@ function AppInner() {
         {/* ─── Left: panels → clients → inbound chips ─── */}
         <section className="col">
           <div className="col-header">
-            <h2>🔑 Источники ключей</h2>
+            <h2>🔑 Источники ключей{panel && <span className="panel-sub"> · {panel.name} ({panelHost(panel)})</span>}</h2>
             <div className="right">
               <span className="badge accent">
                 {(keySources || []).length} {(keySources || []).length === 1 ? 'источник' : 'источников'}
@@ -409,7 +411,7 @@ function AppInner() {
                   const unreachable = (keySources || []).some(ks => ks.type === 'panel' && ks.panelId === p.id && ks.status === 'panel_unreachable');
                   return (
                     <option key={p.id} value={p.id}>
-                      {unreachable ? '○' : '●'} {p.name} · {cnt}
+                      {unreachable ? '○' : '●'} {p.name} ({panelHost(p)}) · {cnt}
                     </option>
                   );
                 })}

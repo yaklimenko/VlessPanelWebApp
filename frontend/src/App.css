@@ -101,6 +101,7 @@ input, button, select, textarea { font-family: inherit; font-size: inherit; colo
   flex-shrink: 0; background: var(--bg);
 }
 .column-header h2 { font-size: 14px; font-weight: 600; }
+.panel-sub { font-size: 12px; color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
 .column-body { flex: 1; overflow-y: auto; padding: 8px 12px; }
 .column-tools {
   flex-shrink: 0; padding: 8px 12px 6px; border-bottom: 1px solid var(--border);
