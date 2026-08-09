@@ -564,6 +564,13 @@ export function EditClientModal({ client, allInbounds, onClose, onAttachInbound,
   const attachedIds = new Set(inbounds);
   const available = (allInbounds || []).filter(ib => !attachedIds.has(ib.remark));
   const [addInboundId, setAddInboundId] = React.useState(available[0]?.id || '');
+  // Если список доступных инбаундов изменился (например, после добавления),
+  // переводим селект на актуальный первый доступный, а не на устаревший id.
+  React.useEffect(() => {
+    if (!available.some(ib => ib.id === addInboundId)) {
+      setAddInboundId(available[0]?.id || '');
+    }
+  }, [available, addInboundId]);
   const expiryMillis = client.expiryTime || 0;
   const expiryStr = expiryMillis > 0
     ? new Date(expiryMillis).toISOString().slice(0, 10)

@@ -143,12 +143,19 @@ function AppInner() {
       .catch(err => showToast('⚠️ ' + err.message));
   };
 
+  const refreshClientsAndEditing = (d) => {
+    setClients(d);
+    // Модалка редактирования держит снапшот клиента — синхронизируем его со свежим списком,
+    // чтобы добавленный/удалённый инбаунд сразу отобразился в модалке.
+    setEditingClient(prev => (prev ? d.find(c => c.email === prev.email) || prev : prev));
+  };
+
   const handleAttachInbound = async (email, inboundId) => {
     if (!currentPanelId) return;
     try {
       await api.attachInbound(currentPanelId, email, { inboundId });
       showToast('✅ Инбаунд добавлен');
-      api.listClients(currentPanelId).then(d => setClients(d)).catch(() => {});
+      api.listClients(currentPanelId).then(refreshClientsAndEditing).catch(() => {});
     } catch (err) { showToast('⚠️ ' + err.message); }
   };
 
@@ -157,7 +164,7 @@ function AppInner() {
     try {
       await api.detachInbound(currentPanelId, email, { inboundId });
       showToast('🗑 Инбаунд удалён');
-      api.listClients(currentPanelId).then(d => setClients(d)).catch(() => {});
+      api.listClients(currentPanelId).then(refreshClientsAndEditing).catch(() => {});
     } catch (err) { showToast('⚠️ ' + err.message); }
   };
 
