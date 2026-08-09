@@ -246,6 +246,7 @@ func (h *Handlers) ListInbounds(w http.ResponseWriter, r *http.Request) {
 		Remark   string `json:"remark"`
 		Port     int    `json:"port"`
 		Protocol string `json:"protocol"`
+		Enable   bool   `json:"enable"`
 	}
 
 	simple := make([]SimpleInbound, 0, len(inbounds))
@@ -255,6 +256,7 @@ func (h *Handlers) ListInbounds(w http.ResponseWriter, r *http.Request) {
 			Remark:   ib.Remark,
 			Port:     ib.Port,
 			Protocol: ib.Protocol,
+			Enable:   ib.Enable,
 		})
 	}
 

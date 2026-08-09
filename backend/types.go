@@ -257,6 +257,7 @@ type XUIInbound struct {
 	Remark         string             `json:"remark"`
 	Port           int                `json:"port"`
 	Protocol       string             `json:"protocol"`
+	Enable         bool               `json:"enable"`
 	Settings       json.RawMessage    `json:"settings"`
 	StreamSettings *XUIStreamSettings `json:"streamSettings,omitempty"`
 	ClientStats    []XUIClientStats   `json:"clientStats"`

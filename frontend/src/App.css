@@ -406,6 +406,10 @@ input, button, select, textarea { font-family: inherit; font-size: inherit; colo
 .idot.expired { background: var(--danger); }
 .idot.missing { background: #d29922; }
 .idot.panel_unreachable { background: #d29922; }
+.idot.inactive { background: #6e7681; }
+.inb-chip.inactive { opacity: .6; background: rgba(110,118,129,.08); border-color: rgba(110,118,129,.35); }
+.inb-chip.inactive:hover { background: rgba(110,118,129,.15); border-color: rgba(110,118,129,.5); }
+.edit-inbound-chip.inactive { opacity: .6; background: rgba(110,118,129,.12); border-color: rgba(110,118,129,.35); color: #8b949e; }
 .inb-chip .inb-port { color: var(--text-secondary); font-family: var(--mono, monospace); font-size: 10.5px; }
 .inb-chip.added .inb-port { color: rgba(63,185,80,.7); }
 .inb-chip .inb-ok { font-size: 10px; }

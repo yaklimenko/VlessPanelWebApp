@@ -153,14 +153,15 @@ export function ClientCard({ client, inbounds, keySources, activeSubKeys, onChip
           const ks = statusFor(ib.id);
           const st = ks ? ks.status : 'ok'; // без KeySource — статус неизвестен, показываем как ok
           const added = !!(ks && activeSubKeys && activeSubKeys.has(ks.id));
+          const inactive = ib.enable === false;
           return (
             <button
               key={ib.id}
-              className={`inb-chip${added ? ' added' : ''}`}
-              title={`${panelName} · ${ib.remark} :${ib.port} · ${client.email}${ks && ks.expireDate ? ' · до ' + fmtDate(ks.expireDate) : ''}${added ? '\nуже добавлено в подписку' : ''}`}
+              className={`inb-chip${added ? ' added' : ''}${inactive ? ' inactive' : ''}`}
+              title={`${panelName} · ${ib.remark} :${ib.port} · ${client.email}${inactive ? ' · ⚠️ инбаунд неактивен' : ''}${ks && ks.expireDate ? ' · до ' + fmtDate(ks.expireDate) : ''}${added ? '\nуже добавлено в подписку' : ''}`}
               onClick={(e) => { e.stopPropagation(); onChipClick && onChipClick(client, ib); }}
             >
-              <span className={`idot ${st}`}></span>
+              <span className={`idot ${st}${inactive ? ' inactive' : ''}`}></span>
               <span className="inb-name">{ib.remark}</span>
               <span className="inb-port">:{ib.port}</span>
               {added && <span className="inb-ok">✓</span>}
@@ -588,16 +589,20 @@ export function EditClientModal({ client, allInbounds, onClose, onAttachInbound,
         <div className="form-group">
           <label>Инбаунды</label>
           <div className="edit-inbound-list">
-            {inbounds.map(inb => (
-              <span key={inb} className="key-chip edit-inbound-chip">
-                {inb}
-                <button
-                  className="edit-inbound-remove"
-                  onClick={() => onDetachInbound(client.email, (allInbounds || []).find(ib => ib.remark === inb)?.id)}
-                  title="Удалить инбаунд"
-                >&times;</button>
-              </span>
-            ))}
+            {inbounds.map(inb => {
+              const inbObj = (allInbounds || []).find(ib => ib.remark === inb);
+              const inbInactive = !!(inbObj && inbObj.enable === false);
+              return (
+                <span key={inb} className={`key-chip edit-inbound-chip${inbInactive ? ' inactive' : ''}`} title={inbInactive ? `${inb} — инбаунд неактивен` : undefined}>
+                  {inb}
+                  <button
+                    className="edit-inbound-remove"
+                    onClick={() => onDetachInbound(client.email, (allInbounds || []).find(ib => ib.remark === inb)?.id)}
+                    title="Удалить инбаунд"
+                  >&times;</button>
+                </span>
+              );
+            })}
           </div>
           {available.length > 0 && (
             <div className="edit-inbound-add">
