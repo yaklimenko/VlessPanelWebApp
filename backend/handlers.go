@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -23,19 +22,13 @@ import (
 )
 
 // Handlers groups all HTTP handlers
-type syncCacheEntry struct {
-	synced    *bool
-	checkedAt string
-}
-
 type Handlers struct {
 	storage  *Storage
 	panelAPI *PanelAPI
 	config   Config
 
 	syncMu     sync.Mutex
-	syncNeeded bool                 // true после любой мутации (нужна сверка с агрегатором)
-	syncCache  map[string]syncCacheEntry // последние вычисленные статусы синка по подпискам
+	syncNeeded bool // true после любой мутации — нужно синкать с агрегатором
 }
 
 // NewHandlers creates a new Handlers instance
@@ -44,8 +37,7 @@ func NewHandlers(storage *Storage, panelAPI *PanelAPI, config Config) *Handlers 
 		storage:    storage,
 		panelAPI:   panelAPI,
 		config:     config,
-		syncNeeded: true, // при старте статус неизвестен — первая сверка будет реальной
-		syncCache:  make(map[string]syncCacheEntry),
+		syncNeeded: true, // при старте статус неизвестен — до первого синка честно показываем «требуется синк»
 	}
 	storage.SetOnChange(h.markSyncNeeded)
 	return h
@@ -436,24 +428,10 @@ func (h *Handlers) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enrich sync status concurrently (each active sub = one HEAD to aggregator).
-	var wg sync.WaitGroup
+	// Статус синка выводится из глобального флага (мутации → требуется синк).
 	for i := range subs {
-		if subs[i].Status == "active" {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
-				h.enrichSync(&subs[i])
-			}(i)
-		}
+		h.enrichSync(&subs[i])
 	}
-	wg.Wait()
-
-	// Только что выполнили полную сверку с агрегатором (или взяли из кэша) —
-	// кэш актуален, флаг «нужен синк» сбрасываем до следующей мутации.
-	h.syncMu.Lock()
-	h.syncNeeded = false
-	h.syncMu.Unlock()
 
 	respondJSON(w, http.StatusOK, subs)
 }
@@ -1497,23 +1475,10 @@ func (h *Handlers) SyncToAggregator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Синк прошёл: локальные файлы = агрегатор. Флаг сбрасываем, кэш заполняем
-	// актуальными статусами без лишних HTTP-запросов (активные подписки — synced).
+	// Синк прошёл: локальные файлы = агрегатор. Флаг опускаем — всё синхронизировано.
 	h.syncMu.Lock()
 	h.syncNeeded = false
-	now := time.Now().UTC().Format("2006-01-02T15:04:05Z07:00")
 	h.syncMu.Unlock()
-
-	if subs, err := h.storage.ListSubscriptions(); err == nil {
-		h.syncMu.Lock()
-		for i := range subs {
-			if subs[i].Status == "active" {
-				synced := true
-				h.syncCache[subs[i].Name] = syncCacheEntry{synced: &synced, checkedAt: now}
-			}
-		}
-		h.syncMu.Unlock()
-	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "synced",
@@ -1521,14 +1486,9 @@ func (h *Handlers) SyncToAggregator(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// enrichSync computes the sync status for a subscription by comparing the
-// aggregator's content (GET /sub/{name}, base64) with the local file.
-// The aggregator does not emit Last-Modified (nginx → FastAPI), so we compare
-// content instead of timestamps — more accurate anyway.
-//
-// Результаты кэшируются в памяти: если с момента последней полной сверки не
-// было мутаций (syncNeeded == false), статус отдаётся из кэша без HTTP-запроса
-// к агрегатору.
+// enrichSync sets the sync status of a subscription from the global flag
+// isAggregatorSyncNeeded: после синка — всё синхронизировано, после любой
+// мутации — требуется синк. Никаких HTTP-запросов к агрегатору.
 func (h *Handlers) enrichSync(sub *Subscription) {
 	if sub == nil {
 		return
@@ -1542,88 +1502,11 @@ func (h *Handlers) enrichSync(sub *Subscription) {
 
 	h.syncMu.Lock()
 	needed := h.syncNeeded
-	entry, ok := h.syncCache[sub.Name]
 	h.syncMu.Unlock()
-	if !needed && ok {
-		sub.Synced = entry.synced
-		sub.AggrLastModified = entry.checkedAt
-		return
-	}
 
-	contentMatch, checkedAt, err := h.aggregatorMatchesLocal(sub.Name)
-	if err != nil || !contentMatch {
-		sub.AggrLastModified = checkedAt
-	}
-	if err != nil {
-		// Aggregator unreachable → unknown.
-		sub.Synced = nil
-	} else {
-		synced := contentMatch
-		if sub.UpdatedAt != "" && sub.FileMtime != "" && sub.UpdatedAt > sub.FileMtime {
-			synced = false // metadata changed after the file was written → needs regenerate
-		}
-		sub.Synced = &synced
-	}
-
-	h.syncMu.Lock()
-	h.syncCache[sub.Name] = syncCacheEntry{synced: sub.Synced, checkedAt: sub.AggrLastModified}
-	h.syncMu.Unlock()
-}
-
-// aggregatorMatchesLocal fetches /sub/{name} from the aggregator and compares
-// its (base64-decoded) content with the local subscription file.
-func (h *Handlers) aggregatorMatchesLocal(name string) (bool, string, error) {
-	client := &http.Client{Timeout: 6 * time.Second}
-	u := strings.TrimRight(h.config.AggregatorURL, "/") + "/sub/" + url.PathEscape(name)
-	resp, err := client.Get(u)
-	if err != nil {
-		return false, "", err
-	}
-	defer resp.Body.Close()
-
-	checkedAt := ""
-	if d := resp.Header.Get("Date"); d != "" {
-		if t, err := http.ParseTime(d); err == nil {
-			checkedAt = t.UTC().Format("2006-01-02T15:04:05Z07:00")
-		}
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
-		return false, checkedAt, nil
-	}
-	if resp.StatusCode >= 400 {
-		return false, checkedAt, fmt.Errorf("aggregator HTTP %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, checkedAt, err
-	}
-
-	local, err := h.storage.GetSubscriptionRaw(name)
-	if err != nil {
-		return false, checkedAt, nil
-	}
-
-	normLocal := strings.TrimRight(local, "\n")
-
-	// Try base64 (aggregator returns base64 of the file).
-	clean := strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\r' || r == ' ' {
-			return -1
-		}
-		return r
-	}, string(body))
-	if decoded, err := base64.StdEncoding.DecodeString(clean); err == nil {
-		if strings.TrimRight(string(decoded), "\n") == normLocal {
-			return true, checkedAt, nil
-		}
-	}
-	// Fallback: plain comparison.
-	if strings.TrimRight(string(body), "\n") == normLocal {
-		return true, checkedAt, nil
-	}
-	return false, checkedAt, nil
+	synced := !needed
+	sub.Synced = &synced
+	sub.AggrLastModified = ""
 }
 
 // subscriptionNameTaken checks name duplication (case-insensitive) in files and meta.

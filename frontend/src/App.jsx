@@ -728,10 +728,8 @@ function SubscriptionDetail({
               </div>
               <div className="row">
                 <span>Локально (mtime):</span><code>{fmtDateTime(sub.fileMtime) || '—'}</code>
-                <span>·</span><span>Агрегатор (проверка):</span><code>{fmtDateTime(sub.aggrLastModified) || '—'}</code>
-                {sub.synced === true && <span className="sync-ok">— версии совпадают</span>}
-                {sub.synced === false && <span className="sync-warn">— отличается, нужен rsync</span>}
-                {sub.synced == null && <span className="sync-warn">— агрегатор недоступен</span>}
+                {sub.synced === true && <span className="sync-ok">— синхронизировано</span>}
+                {sub.synced === false && <span className="sync-warn">— есть изменения, нужен синк</span>}
               </div>
             </>
           ) : (
