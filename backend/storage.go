@@ -489,7 +489,7 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 
 		if meta, ok := metas[clientName]; ok {
 			// Pair meta keys with file lines by index (file is truth for links).
-			keys := make([]SubKey, 0, len(lines))
+			keys := make([]SubKey, 0, len(lines)+2)
 			for i, line := range lines {
 				line = strings.TrimSpace(line)
 				if line == "" {
@@ -501,6 +501,13 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 					keys = append(keys, k)
 				} else {
 					keys = append(keys, SubKey{ID: fmt.Sprintf("k-%d", i+1), Link: line})
+				}
+			}
+			// Meta keys beyond the file lines (e.g. KeySource added but not yet
+			// generated) are kept as-is with their stored (possibly empty) link.
+			if len(meta.Keys) > len(lines) {
+				for i := len(lines); i < len(meta.Keys); i++ {
+					keys = append(keys, meta.Keys[i])
 				}
 			}
 			sub := meta
