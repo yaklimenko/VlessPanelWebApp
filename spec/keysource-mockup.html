@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VlessPanel · Подписки (KeySource) — прототип</title>
+<style>
+/* ═══════════ База — стилистика текущего фронта VlessPanel ═══════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #21262d;
+  --text: #e6edf3;
+  --text-secondary: #8b949e;
+  --accent: #58a6ff;
+  --accent-hover: #79b8ff;
+  --accent-muted: rgba(88,166,255,.15);
+  --success: #3fb950;
+  --success-dim: rgba(63,185,80,.12);
+  --danger: #f85149;
+  --danger-faded: rgba(248,81,73,.15);
+  --warn: #d29922;
+  --warn-dim: rgba(210,153,34,.12);
+  --grey: #8b949e;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: 0 2px 8px rgba(0,0,0,.4);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+}
+html, body { height: 100%; }
+body {
+  font-family: var(--font); background: var(--bg); color: var(--text);
+  font-size: 14px; line-height: 1.5; overflow: hidden;
+}
+input, button, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #30363d; }
+button { cursor: pointer; }
+.mono { font-family: var(--mono); }
+
+/* ═══════════ Header ═══════════ */
+.header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 20px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+.header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.app-title { font-size: 16px; font-weight: 700; letter-spacing: -.3px; white-space: nowrap; }
+.app-title .accent { color: var(--accent); }
+.app-version { font-size: 11px; color: var(--text-secondary); }
+.app-prototype { font-size: 11px; background: var(--accent-muted); color: var(--accent); border: 1px solid rgba(88,166,255,.3); padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+
+/* ═══════════ Кнопки ═══════════ */
+.btn {
+  display: inline-flex; align-items: center; gap: 5px; justify-content: center;
+  padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer;
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s, opacity .15s;
+}
+.btn:hover { background: #1c2333; border-color: var(--accent); }
+.btn-primary { background: var(--accent-muted); border-color: var(--accent); color: var(--accent); }
+.btn-primary:hover { background: rgba(88,166,255,.25); }
+.btn-success { color: var(--success); border-color: rgba(63,185,80,.5); background: rgba(63,185,80,.08); }
+.btn-success:hover { background: rgba(63,185,80,.16); border-color: var(--success); }
+.btn-danger { color: var(--danger); }
+.btn-danger:hover { background: var(--danger-faded); border-color: var(--danger); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-xs { padding: 2px 8px; font-size: 11px; border-radius: 4px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.loading { pointer-events: none; opacity: .7; }
+.btn .spin { display: inline-block; width: 11px; height: 11px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: rot .7s linear infinite; }
+@keyframes rot { to { transform: rotate(360deg); } }
+
+/* ═══════════ Раскладка ═══════════ */
+.app { display: flex; flex-direction: column; height: 100vh; }
+.main { display: grid; grid-template-columns: 44% 56%; flex: 1; overflow: hidden; }
+.col { display: flex; flex-direction: column; overflow: hidden; }
+.col + .col { border-left: 1px solid var(--border); }
+.col-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--bg);
+}
+.col-header h2 { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.col-header .right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.col-body { flex: 1; overflow-y: auto; padding: 10px 14px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 600; background: rgba(139,148,158,.15); color: var(--text-secondary);
+  white-space: nowrap;
+}
+.badge.ok { background: var(--success-dim); color: var(--success); }
+.badge.warn { background: var(--warn-dim); color: var(--warn); }
+.badge.danger { background: var(--danger-faded); color: var(--danger); }
+.badge.accent { background: var(--accent-muted); color: var(--accent); }
+
+/* ═══════════ Левая колонка: панели → клиенты → чипсы ═══════════ */
+.panel-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+.panel-tab {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
+  border: 1px solid var(--border); background: var(--surface); border-radius: 14px;
+  font-size: 12px; font-weight: 500; color: var(--text-secondary); transition: all .15s;
+}
+.panel-tab:hover { border-color: #30363d; color: var(--text); }
+.panel-tab.active { border-color: var(--accent); background: var(--accent-muted); color: var(--accent); }
+.panel-tab .pdot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+.panel-tab .pdot.off { background: var(--danger); }
+.panel-tab .cnt { font-size: 10px; color: var(--text-secondary); background: var(--bg); border-radius: 8px; padding: 0 6px; line-height: 16px; }
+
+.search-wrap { position: relative; margin-bottom: 10px; }
+.search-wrap input {
+  width: 100%; padding: 7px 12px 7px 32px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 13px; outline: none; transition: border-color .15s;
+}
+.search-wrap input:focus { border-color: var(--accent); }
+.search-wrap input::placeholder { color: var(--text-secondary); }
+.search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 13px; pointer-events: none; }
+
+.client-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 9px 12px; margin-bottom: 8px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.client-card:hover { border-color: #30363d; }
+.client-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 7px; }
+.client-name { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.client-inbounds { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
+.client-noinb { color: var(--text-secondary); font-size: 12px; font-style: italic; padding: 2px 0 0; }
+.client-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* чипса инбаунда (слева) */
+.inb-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; background: rgba(88,166,255,.10);
+  border: 1px solid rgba(88,166,255,.28); border-radius: 12px;
+  font-size: 11.5px; color: var(--accent); cursor: pointer;
+  transition: background .15s, border-color .15s, transform .05s;
+  user-select: none;
+}
+.inb-chip:hover { background: rgba(88,166,255,.22); border-color: var(--accent); }
+.inb-chip:active { transform: translateY(1px); }
+.inb-chip.added { background: rgba(63,185,80,.12); border-color: rgba(63,185,80,.4); color: var(--success); }
+.inb-chip .idot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.idot.ok { background: var(--success); }
+.idot.expired { background: var(--danger); }
+.idot.missing { background: var(--warn); }
+.inb-chip .inb-port { color: var(--text-secondary); font-family: var(--mono); font-size: 10.5px; }
+.inb-chip.added .inb-port { color: rgba(63,185,80,.7); }
+
+/* ═══════════ Правая колонка: подписки ═══════════ */
+.sub-select { width: min(380px, calc(100% - 28px)); margin: 10px 14px 0; padding: 7px 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; cursor: pointer; }
+.sub-select:focus { border-color: var(--accent); outline: none; }
+.sub-tab {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
+  border: 1px solid var(--border); background: var(--surface); border-radius: 14px;
+  font-size: 12px; font-weight: 500; color: var(--text-secondary);
+  white-space: nowrap; transition: all .15s; cursor: pointer;
+}
+.sub-tab:hover { border-color: #30363d; color: var(--text); }
+.sub-tab.active { border-color: var(--accent); background: var(--accent-muted); color: var(--accent); }
+.sub-tab .sdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.sub-tab .sdot.draft { background: var(--text-secondary); }
+.sub-tab .sdot.active { background: var(--success); }
+.sub-tab .warn-ico { color: var(--warn); font-size: 10px; }
+.sub-tab .kcnt { font-size: 10px; color: var(--text-secondary); background: var(--bg); border-radius: 8px; padding: 0 6px; line-height: 16px; }
+
+/* Детали подписки */
+.sub-detail { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.sub-detail-header { padding: 12px 16px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.sub-detail-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sub-detail-title h3 { font-size: 16px; font-weight: 700; }
+.sub-detail-sub { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--text-secondary); }
+.sub-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.sub-detail-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+
+/* ═══════════ Чипса KeySource ═══════════ */
+.ks-chip {
+  display: flex; align-items: center; gap: 8px; width: 100%; flex-wrap: wrap; row-gap: 4px;
+  background: var(--success-dim); border: 1px solid rgba(63,185,80,.32);
+  border-left: 3px solid var(--success);
+  border-radius: var(--radius-sm); padding: 6px 8px 6px 10px;
+  margin-bottom: 6px; font-size: 12px; cursor: pointer;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+  user-select: none;
+}
+.ks-chip:hover { background: rgba(63,185,80,.18); box-shadow: 0 0 0 1px rgba(63,185,80,.25); }
+.ks-chip.flash { animation: flashChip 1.2s ease; }
+@keyframes flashChip { 0%,100% { box-shadow: none; } 30% { box-shadow: 0 0 0 2px var(--accent); background: rgba(88,166,255,.22); } }
+.ks-chip.ks-expired { background: rgba(63,185,80,.07); border-left-color: var(--danger); border-color: rgba(248,81,73,.35); }
+.ks-chip.ks-missing { background: rgba(63,185,80,.06); border-left-color: var(--warn); border-color: rgba(210,153,34,.4); }
+.ks-chip.ks-manual {
+  background: rgba(139,148,158,.10); border: 1px solid rgba(139,148,158,.35);
+  border-left: 3px solid var(--grey); cursor: pointer;
+}
+.ks-chip.ks-manual:hover { background: rgba(139,148,158,.18); box-shadow: 0 0 0 1px rgba(139,148,158,.25); }
+
+.ks-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ks-dot.ok { background: var(--success); }
+.ks-dot.expired { background: var(--danger); }
+.ks-dot.missing { background: var(--warn); }
+.ks-dot.manual { background: var(--grey); }
+
+.ks-label { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 220px; }
+.ks-server { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+.ks-sep { color: var(--text-secondary); flex-shrink: 0; }
+.ks-inbound { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; font-family: var(--mono); font-size: 11px; }
+.ks-email { color: var(--accent-hover); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 40px; font-weight: 500; }
+.ks-label .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ks-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 1; min-width: 0; margin-left: auto; }
+.ks-status { font-size: 11px; font-weight: 700; }
+.ks-status.ok { color: var(--success); }
+.ks-status.expired { color: var(--danger); }
+.ks-status.missing { color: var(--warn); }
+.ks-status.manual { color: var(--grey); }
+.ks-traffic { font-size: 11px; color: var(--text-secondary); font-family: var(--mono); white-space: nowrap; }
+.ks-expiry { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+.ks-note { font-size: 11px; color: var(--warn); white-space: nowrap; }
+.ks-testres { font-size: 11px; white-space: nowrap; }
+.ks-testres.ok { color: var(--success); }
+.ks-testres.fail { color: var(--danger); }
+.ks-testres.run { color: var(--accent); }
+
+.ks-ico { display: inline-flex; align-items: center; justify-content: center; background: none; border: none; padding: 2px; border-radius: 4px; color: var(--text-secondary); transition: all .15s; flex-shrink: 0; }
+.ks-ico:hover { color: var(--accent); background: rgba(88,166,255,.15); }
+.ks-ico.del:hover { color: var(--danger); background: var(--danger-faded); }
+.ks-ico.del-red:hover { color: var(--danger); background: var(--danger-faded); }
+.ico-clock { color: var(--danger); flex-shrink: 0; }
+.ico-warn { color: var(--warn); flex-shrink: 0; }
+
+/* ═══════════ Блок тестов ═══════════ */
+.test-block { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+.test-block-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.test-block-head h4 { font-size: 13px; font-weight: 600; }
+.test-results {
+  margin-top: 8px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); overflow: hidden;
+}
+.test-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.test-table th {
+  background: #0d1117; padding: 6px 10px; text-align: left; font-weight: 500;
+  color: var(--text-secondary); border-bottom: 1px solid var(--border);
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px;
+}
+.test-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); }
+.test-table tr:last-child td { border-bottom: none; }
+.test-table .ok { color: var(--success); font-weight: 600; }
+.test-table .fail { color: var(--danger); font-weight: 600; }
+.test-table tr:hover td { background: rgba(255,255,255,.02); }
+.test-summary { font-size: 12px; padding: 6px 10px; border-bottom: 1px solid var(--border); color: var(--text-secondary); display: flex; gap: 10px; align-items: center; }
+.test-summary b.ok { color: var(--success); }
+.test-summary b.fail { color: var(--danger); }
+
+/* ═══════════ Инфо файла / синка ═══════════ */
+.file-info {
+  margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px;
+  font-size: 12px; color: var(--text-secondary);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.file-info .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.file-info code { font-family: var(--mono); font-size: 11.5px; color: var(--text); background: var(--surface); border: 1px solid var(--border); padding: 1px 7px; border-radius: 4px; }
+.file-info .sync-warn { color: var(--warn); font-weight: 600; }
+.file-info .sync-ok { color: var(--success); font-weight: 600; }
+
+/* ═══════════ Пустые состояния ═══════════ */
+.empty-state { text-align: center; padding: 34px 20px; color: var(--text-secondary); }
+.empty-state .icon { font-size: 30px; margin-bottom: 8px; opacity: .5; }
+.empty-state p { font-size: 13px; }
+.empty-state .hint { font-size: 12px; margin-top: 4px; opacity: .8; }
+.empty-state .btn { margin-top: 12px; }
+
+/* ═══════════ Загрузка ═══════════ */
+.loading-state { text-align: center; padding: 34px 20px; color: var(--text-secondary); }
+.loading-state .spin { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: rot .7s linear infinite; margin-bottom: 8px; }
+.loading-state p { font-size: 13px; }
+
+/* ═══════════ Тосты ═══════════ */
+.toast-container {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 9999; display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none; align-items: center;
+}
+.toast {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 20px; font-size: 13px;
+  box-shadow: var(--shadow); pointer-events: auto;
+  animation: toastIn .3s ease forwards;
+  max-width: 520px; text-align: center;
+  border-left: 3px solid var(--accent);
+}
+.toast.ok { border-left-color: var(--success); }
+.toast.err { border-left-color: var(--danger); }
+.toast.warn { border-left-color: var(--warn); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+.toast.out { opacity: 0; transform: translateY(10px); transition: all .3s; }
+
+/* ═══════════ Модалки ═══════════ */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,.62); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-content {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); width: 520px; max-width: 92vw;
+  max-height: 82vh; overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  animation: modalIn .18s ease;
+}
+@keyframes modalIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+}
+.modal-header h3 { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.modal-close { font-size: 16px; min-width: auto; padding: 4px 8px; border: none; background: transparent; border-radius: 4px; }
+.modal-close:hover { background: rgba(255,255,255,.08); }
+.modal-body { padding: 18px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.form-group label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.form-group input {
+  width: 100%; padding: 8px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  font-size: 13px; outline: none; transition: border-color .15s;
+}
+.form-group input:focus { border-color: var(--accent); }
+.form-error { color: var(--danger); font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 5px; }
+.form-hint { font-size: 12px; color: var(--text-secondary); font-style: italic; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* инфо KeySource в модалке */
+.ks-info-grid { display: grid; grid-template-columns: 150px 1fr; gap: 7px 14px; font-size: 13px; margin-bottom: 14px; }
+.ks-info-grid .k { color: var(--text-secondary); font-size: 12px; }
+.ks-info-grid .v { font-weight: 500; word-break: break-all; }
+.ks-info-grid .v.mono { font-family: var(--mono); font-size: 12px; }
+.ks-keybox {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 10px; font-family: var(--mono); font-size: 11.5px; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 12px;
+}
+.warn-box {
+  display: flex; gap: 8px; align-items: flex-start;
+  background: var(--warn-dim); border: 1px solid rgba(210,153,34,.35);
+  border-radius: var(--radius-sm); padding: 9px 12px; font-size: 12.5px; color: var(--warn);
+  margin-bottom: 14px;
+}
+.danger-box {
+  display: flex; gap: 8px; align-items: flex-start;
+  background: var(--danger-faded); border: 1px solid rgba(248,81,73,.35);
+  border-radius: var(--radius-sm); padding: 9px 12px; font-size: 12.5px; color: var(--danger);
+  margin-bottom: 14px;
+}
+.report-list { display: flex; flex-direction: column; gap: 6px; font-size: 13px; margin-bottom: 6px; }
+.report-item { display: flex; gap: 8px; align-items: flex-start; }
+.report-item .mark { font-weight: 700; flex-shrink: 0; }
+.report-item.ok .mark { color: var(--success); }
+.report-item.skip .mark { color: var(--warn); }
+.report-item.manual .mark { color: var(--grey); }
+.report-item .why { color: var(--text-secondary); font-size: 12px; }
+
+/* Подсветка «предложить создать» */
+.hint-flash { animation: hintFlash 1.2s ease; border-radius: 4px; }
+@keyframes hintFlash { 0%,100% { box-shadow: none; } 30% { box-shadow: 0 0 0 2px var(--warn); } }
+.sub-tabs-area.flash { animation: hintFlash 1.2s ease; }
+
+@media (max-width: 1100px) {
+  .main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .col + .col { border-left: none; border-top: 1px solid var(--border); }
+  .ks-label { flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══════ Header ═══════ -->
+  <header class="header">
+    <div class="header-left">
+      <span class="app-title">Vless<span class="accent">Panel</span></span>
+      <span class="app-version">v0.9.0</span>
+      <span class="app-prototype">прототип · экран «Подписки» · KeySource</span>
+    </div>
+    <div class="header-right">
+      <button class="btn btn-sm" id="btnDemoEmpty" title="Показать пустые состояния (нет панелей / нет подписок)">🧪 пустые состояния</button>
+      <button class="btn btn-sm btn-success" id="btnSyncAll" title="rsync на агрегатор (example.com)">⟳ Синк с агрегатором</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- ═══════ Левая колонка: панели → клиенты → чипсы инбаундов ═══════ -->
+    <section class="col">
+      <div class="col-header">
+        <h2>🔑 Источники ключей</h2>
+        <div class="right"><span class="badge accent" id="panelKeysCount">0 ключей</span></div>
+      </div>
+      <div class="col-body" id="leftBody"></div>
+    </section>
+
+    <!-- ═══════ Правая колонка: подписки ═══════ -->
+    <section class="col">
+      <div class="col-header">
+        <h2>📡 Подписки</h2>
+        <div class="right">
+          <span class="badge" id="subsCount">0</span>
+          <button class="btn btn-sm btn-primary" id="btnNewSub">+ Новая подписка</button>
+        </div>
+      </div>
+      <div class="sub-tabs-area" id="subTabsArea" style="padding-bottom:10px;border-bottom:1px solid var(--border);">
+        <select class="sub-select" id="subTabs"></select>
+      </div>
+      <div class="sub-detail" id="subDetail"></div>
+    </section>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+<div id="modalRoot"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   Данные-заглушки (похожи на реальные: панели, клиенты, инбаунды)
+   ═══════════════════════════════════════════════════════════════════ */
+const PANELS = [
+  {
+    id: 'p-adminvps', name: 'AdminVPS Poland', host: '203.0.113.3', reachable: true,
+    clients: [
+      {
+        email: 'ExampleClient2', enabled: true, expiry: '2026-12-31',
+        traffic: { up: 1183741824, down: 356515840 },
+        inbounds: [
+          { inboundId: 1, remark: 'PL1-VLESS-TCP-REALITY', port: 11471 },
+          { inboundId: 2, remark: 'PL1-VLESS-XHTTP-REALITY', port: 33377 },
+        ],
+      },
+      {
+        email: 'ExampleClient3', enabled: true, expiry: '2026-07-20',
+        traffic: { up: 472418643, down: 128849018 },
+        inbounds: [
+          { inboundId: 1, remark: 'PL1-VLESS-TCP-REALITY', port: 11471 },
+          { inboundId: 2, remark: 'PL1-VLESS-XHTTP-REALITY', port: 33377 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'p-hipnl', name: 'Hip NL', host: '203.0.113.2', reachable: true,
+    clients: [
+      {
+        email: 'ExampleClient', enabled: true, expiry: '2026-11-15',
+        traffic: { up: 780140544, down: 1717986918 },
+        inbounds: [
+          { inboundId: 1, remark: 'NL2-vless-tcp-reality', port: 51454 },
+          { inboundId: 2, remark: 'NL2-vless-xHTTP-reality', port: 18108 },
+        ],
+      },
+      {
+        email: 'ExampleClient2', enabled: true, expiry: '2026-12-31',
+        traffic: { up: 322122547, down: 107374182 },
+        inbounds: [
+          { inboundId: 1, remark: 'NL2-vless-tcp-reality', port: 51454 },
+        ],
+      },
+      {
+        email: 'AndreyNovy', enabled: false, expiry: '—',
+        traffic: null,
+        inbounds: [],   // ← клиент без инбаундов (пустое состояние)
+      },
+    ],
+  },
+  {
+    id: 'p-fastvps', name: 'FastVPS Estonia', host: '203.0.113.10', reachable: true,
+    clients: [],        // ← панель без клиентов (пустое состояние)
+  },
+];
+
+/* Статусы KeySource: ok | expired | missing | panel_unreachable | manual */
+const KEY_SOURCES = {
+  'ks-1': {
+    id: 'ks-1', type: 'panel', panelId: 'p-adminvps', clientEmail: 'ExampleClient2', inboundId: 1,
+    status: 'ok', expiry: '2026-12-31',
+    traffic: { up: 1183741824, down: 356515840 },
+    lastTest: { status: 'ok', at: '2026-08-09 17:41', ms: 812 },
+    cachedKey: { link: 'vless://11111111-1111-1111-1111-111111111111@203.0.113.3:11471?encryption=none&security=reality&sni=yahoo.com&fp=chrome&pbk=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB&sid=aaaaaa&spx=%2F&type=tcp&flow=xtls-rprx-vision#PL1-VLESS-TCP-REALITY-ExampleClient2', fetchedAt: '2026-08-09 17:40' },
+  },
+  'ks-2': {
+    id: 'ks-2', type: 'panel', panelId: 'p-adminvps', clientEmail: 'ExampleClient2', inboundId: 2,
+    status: 'ok', expiry: '2026-12-31',
+    traffic: { up: 536870912, down: 214748365 },
+    lastTest: { status: 'ok', at: '2026-08-09 17:42', ms: 934 },
+    cachedKey: { link: 'vless://11111111-1111-1111-1111-111111111111@203.0.113.3:33377?encryption=none&security=reality&sni=yahoo.com&fp=chrome&pbk=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB&sid=aaaaaa&type=xhttp&mode=auto&extra=%7B%22xPadding%22%3A%220000-0000-0000-0000%22%7D&host=yahoo.com#PL1-VLESS-XHTTP-REALITY-ExampleClient2', fetchedAt: '2026-08-09 17:40' },
+  },
+  'ks-3': {
+    id: 'ks-3', type: 'panel', panelId: 'p-adminvps', clientEmail: 'ExampleClient3', inboundId: 1,
+    status: 'expired', expiry: '2026-07-20',
+    traffic: { up: 472418643, down: 128849018 },
+    lastTest: { status: 'fail', at: '2026-08-09 17:38', error: 'срок действия ключа истёк' },
+    cachedKey: { link: 'vless://22222222-2222-2222-2222-222222222222@203.0.113.3:11471?encryption=none&security=reality&sni=yahoo.com&fp=chrome&pbk=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB&sid=bbbbbb&spx=%2F&type=tcp&flow=xtls-rprx-vision#PL1-VLESS-TCP-REALITY-ExampleClient3', fetchedAt: '2026-08-09 17:38' },
+  },
+  'ks-4': {
+    id: 'ks-4', type: 'panel', panelId: 'p-hipnl', clientEmail: 'ExampleClient', inboundId: 1,
+    status: 'ok', expiry: '2026-11-15',
+    traffic: { up: 780140544, down: 1717986918 },
+    lastTest: { status: 'ok', at: '2026-08-09 17:44', ms: 1203 },
+    cachedKey: { link: 'vless://00000000-0000-0000-0000-000000000000@203.0.113.2:51454?encryption=none&security=reality&sni=www.google.com&fp=firefox&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=cccccc&spx=%2F&type=tcp&flow=xtls-rprx-vision#NL2-vless-tcp-reality-ExampleClient', fetchedAt: '2026-08-09 17:40' },
+  },
+  'ks-5': {
+    id: 'ks-5', type: 'panel', panelId: 'p-hipnl', clientEmail: 'ExampleClient', inboundId: 2,
+    status: 'ok', expiry: '2026-11-15',
+    traffic: { up: 1048576000, down: 2147483648 },
+    lastTest: { status: 'ok', at: '2026-08-09 17:44', ms: 1187 },
+    cachedKey: { link: 'vless://00000000-0000-0000-0000-000000000000@203.0.113.2:18108?encryption=none&security=reality&sni=www.google.com&fp=firefox&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=cccccc&type=xhttp&mode=auto&host=www.google.com#NL2-vless-xHTTP-reality-ExampleClient', fetchedAt: '2026-08-09 17:40' },
+  },
+  'ks-6': {
+    id: 'ks-6', type: 'panel', panelId: 'p-hipnl', clientEmail: 'ExampleClient2', inboundId: 1,
+    status: 'ok', expiry: '2026-12-31',
+    traffic: { up: 322122547, down: 107374182 },
+    lastTest: { status: 'ok', at: '2026-08-09 17:45', ms: 1001 },
+    cachedKey: { link: 'vless://11111111-1111-1111-1111-111111111111@203.0.113.2:51454?encryption=none&security=reality&sni=www.google.com&fp=firefox&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=dddddd&spx=%2F&type=tcp&flow=xtls-rprx-vision#NL2-vless-tcp-reality-ExampleClient2', fetchedAt: '2026-08-09 17:40' },
+  },
+  'ks-7': {
+    id: 'ks-7', type: 'panel', panelId: 'p-adminvps', clientEmail: 'ExampleClient3', inboundId: 2,
+    status: 'missing', expiry: null,
+    traffic: null,
+    lastTest: { status: 'fail', at: '2026-08-09 17:38', error: 'клиент не найден на панели (404)' },
+    cachedKey: null,
+  },
+};
+
+/* Manual-ключ (legacy, без KeySource): grey-чипса */
+const LEGACY_KEY = {
+  id: 'legacy-1', keySourceId: null,
+  label: 'manual · vless://…@203.0.113.2:51454#legacy',
+  link: 'vless://33333333-3333-3333-3333-333333333333@203.0.113.2:51454?encryption=none&security=reality&sni=www.google.com&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=eeeeee&spx=%2F&type=tcp&flow=xtls-rprx-vision#legacy-key',
+  lastTest: { status: 'ok', at: '2026-08-09 17:40', ms: 987 },
+};
+
+let SUBS = [
+  {
+    id: 'sub1', name: 'Anton', status: 'active', updatedAt: '2026-08-08 18:20',
+    synced: true, fileMtime: '2026-08-08 18:20', aggrLastModified: '2026-08-08 18:20',
+    keys: [
+      { id: 'k1', keySourceId: 'ks-1' },
+      { id: 'k2', keySourceId: 'ks-4' },
+      { id: 'k3', keySourceId: null },   // legacy manual
+    ],
+  },
+  {
+    id: 'sub2', name: 'ASmaleha', status: 'active', updatedAt: '2026-08-09 16:55',
+    synced: false, fileMtime: '2026-08-09 14:02', aggrLastModified: '2026-08-09 14:02',
+    keys: [
+      { id: 'k4', keySourceId: 'ks-1' },
+      { id: 'k5', keySourceId: 'ks-3' },  // ← expired (красный циферблат)
+      { id: 'k6', keySourceId: 'ks-5' },
+    ],
+  },
+  { id: 'sub3', name: 'Karina', status: 'active', updatedAt: '2026-08-09 10:00', synced: true, fileMtime: '2026-08-09 10:00', aggrLastModified: '2026-08-09 10:00', keys: [{ id: 'k7', keySourceId: 'ks-1' }] },
+  { id: 'sub4', name: 'Mashenka', status: 'draft', updatedAt: '2026-08-09 17:02', synced: false, fileMtime: null, aggrLastModified: null, keys: [] },
+  { id: 'sub5', name: 'ExampleClient', status: 'active', updatedAt: '2026-08-07 12:30', synced: true, fileMtime: '2026-08-07 12:30', aggrLastModified: '2026-08-07 12:30', keys: [{ id: 'k8', keySourceId: 'ks-4' }] },
+  { id: 'sub6', name: 'SergeyRahmatullin', status: 'active', updatedAt: '2026-08-06 09:15', synced: true, fileMtime: '2026-08-06 09:15', aggrLastModified: '2026-08-06 09:15', keys: [{ id: 'k9', keySourceId: 'ks-5' }] },
+  { id: 'sub7', name: 'TamaraMihaylovka', status: 'active', updatedAt: '2026-08-08 20:40', synced: true, fileMtime: '2026-08-08 20:40', aggrLastModified: '2026-08-08 20:40', keys: [{ id: 'k10', keySourceId: 'ks-2' }] },
+  { id: 'sub8', name: 'TanyaZayatinova', status: 'active', updatedAt: '2026-08-09 08:05', synced: true, fileMtime: '2026-08-09 08:05', aggrLastModified: '2026-08-09 08:05', keys: [{ id: 'k11', keySourceId: 'ks-1' }] },
+  { id: 'sub9', name: 'Example', status: 'draft', updatedAt: '2026-08-09 17:02', synced: false, fileMtime: null, aggrLastModified: null, keys: [] },
+];
+
+/* ═══════════════════════ Состояние UI ═══════════════════════ */
+let state = {
+  panelId: 'p-adminvps',
+  search: '',
+  subs: JSON.parse(JSON.stringify(SUBS)),
+  selectedSubId: 'sub2',
+  emptyDemo: false,
+  loadingPanel: false,
+  testingSub: false,
+  generating: false,
+  keyBeingTested: null,     // keySourceId, у которого крутится per-key тест
+  perKeyResults: {},        // keySourceId → {ok, ms, error}
+};
+
+const $ = (sel) => document.querySelector(sel);
+const panelById = (id) => PANELS.find(p => p.id === id);
+const getSub = (id) => state.subs.find(s => s.id === id);
+const selectedSub = () => state.subs.find(s => s.id === state.selectedSubId) || null;
+const ksOf = (key) => (key.keySourceId ? KEY_SOURCES[key.keySourceId] : null);
+
+/* метаданные KeySource (сервер/инбаунд) выводятся из PANELS — единый источник */
+function ksMeta(ks) {
+  const panel = ks && ks.panelId ? panelById(ks.panelId) : null;
+  const client = panel ? panel.clients.find(c => c.email === ks.clientEmail) : null;
+  const inb = client ? client.inbounds.find(i => i.inboundId === ks.inboundId) : null;
+  return { panel, client, inb };
+}
+
+/* короткая подпись KeySource для списков/отчётов */
+function ksShort(ks) {
+  const meta = ksMeta(ks);
+  return (meta.panel ? meta.panel.name : '?') + ' · ' + (meta.inb ? meta.inb.remark : '?') + ' · ' + (ks.clientEmail || '?');
+}
+
+
+/* ключ KeySource по (panelId, email, inboundId) — для левых чипс */
+function ksIdFor(panelId, email, inboundId) {
+  for (const id in KEY_SOURCES) {
+    const ks = KEY_SOURCES[id];
+    if (ks.type === 'panel' && ks.panelId === panelId && ks.clientEmail === email && ks.inboundId === inboundId) return id;
+  }
+  return null;
+}
+
+/* ═══════════════════════ Утилиты ═══════════════════════ */
+function fmtBytes(b) {
+  if (b == null) return '—';
+  const u = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  let i = 0, v = b;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return (v >= 100 ? v.toFixed(0) : v.toFixed(1)) + u[i];
+}
+function fmtDate(iso) {
+  if (!iso || iso === '—') return '—';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+function fmtShortDate(iso) {
+  if (!iso || iso === '—') return '—';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+function keyLabel(ks) {
+  if (!ks) return 'manual';
+  if (ks.label) return ks.label;
+  const meta = ksMeta(ks);
+  return (meta.inb ? meta.inb.remark + '-' : '') + ks.clientEmail;
+}
+
+/* ═══════════════════════ Тосты ═══════════════════════ */
+function toast(msg, type) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.innerHTML = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 320); }, 3200);
+}
+
+/* ═══════════════════════ Буфер обмена (с fallback для file://) ═══════════════════════ */
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
+  } catch (e) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px'; ta.style.top = '-9999px';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) { return false; }
+}
+async function copyKey(ks, key) {
+  let link = null;
+  if (ks) link = (ks.cachedKey && ks.cachedKey.link) || ks.vlessLink;
+  else link = (key && key.link);
+  const ok = await copyText(link || '');
+  toast(ok ? '🔑 VLESS-ключ скопирован' : '⚠️ Не удалось скопировать в буфер', ok ? 'ok' : 'err');
+}
+
+/* ═══════════════════════ Модалки ═══════════════════════ */
+function openModal(html) {
+  const root = $('#modalRoot');
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.innerHTML = html;
+  ov.addEventListener('mousedown', (e) => { if (e.target === ov) closeModal(); });
+  root.appendChild(ov);
+  const inp = ov.querySelector('input:not([type=hidden])');
+  if (inp) setTimeout(() => inp.focus(), 60);
+}
+function closeModal() { $('#modalRoot').innerHTML = ''; }
+
+/* ── Модалка «+ Новая подписка» (имя + ошибка дубля) ── */
+function openNewSubModal() {
+  openModal(`
+    <div class="modal-content">
+      <div class="modal-header"><h3>➕ Новая подписка</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="newSubName">Имя подписки</label>
+          <input id="newSubName" placeholder="Например: FriendsFamily, perMonth…" maxlength="60">
+          <div id="newSubError"></div>
+          <div class="form-hint">Имя станет частью файла и ссылки: <code class="mono">configs-{имя}.txt</code> · <code class="mono">/sub/{имя}</code></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn" onclick="closeModal()">Отмена</button>
+          <button class="btn btn-primary" id="newSubSubmit">Создать черновик</button>
+        </div>
+      </div>
+    </div>`);
+  $('#newSubSubmit').addEventListener('click', submitNewSub);
+  $('#newSubName').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitNewSub(); });
+}
+function submitNewSub() {
+  const name = $('#newSubName').value.trim();
+  const err = $('#newSubError');
+  if (!name) { err.innerHTML = '<div class="form-error">⚠ Укажите имя подписки</div>'; return; }
+  if (state.subs.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+    err.innerHTML = '<div class="form-error">⚠ Подписка с именем «' + esc(name) + '» уже существует</div>';
+    return;
+  }
+  const sub = {
+    id: 'sub-' + Date.now(), name, status: 'draft', updatedAt: nowStr(),
+    synced: false, fileMtime: null, aggrLastModified: null, keys: [],
+  };
+  state.subs.push(sub);
+  state.selectedSubId = sub.id;
+  closeModal();
+  renderRight();
+  toast('✅ Черновик «' + esc(name) + '» создан — добавьте чипсы слева', 'ok');
+}
+function nowStr() {
+  return new Date().toISOString().slice(0, 16).replace('T', ' ') + ':00';
+}
+
+/* ── Модалка деталей KeySource ── */
+function openKsModal(ks, key) {
+  const isManual = !ks;
+  const sub = selectedSub();
+  const inSubs = isManual ? 0 : state.subs.filter(s => s.keys.some(k => k.keySourceId === ks.id)).length;
+  const isInThisSub = sub && ((isManual && sub.keys.some(k => !k.keySourceId)) || (!isManual && sub.keys.some(k => k.keySourceId === ks.id)));
+
+  let statusCell, title, rows = '', extra = '';
+  if (!ks) {
+    title = esc((key && key.label) || 'manual');
+    statusCell = '<span class="badge">manual</span>';
+    const lastTest = LEGACY_KEY.lastTest
+      ? (LEGACY_KEY.lastTest.status === 'ok' ? '✅ OK за ' + LEGACY_KEY.lastTest.ms + ' мс · ' + LEGACY_KEY.lastTest.at : '❌ ' + LEGACY_KEY.lastTest.error)
+      : '— тест не запускался';
+    rows = `<span class="k">Тип</span><span class="v">KeySource · manual (хранит строку vless-ключа)</span>
+      <span class="k">Label</span><span class="v">${esc((key && key.label) || 'manual')}</span>
+      <span class="k">Статус</span><span class="v">${statusCell}</span>
+      <span class="k">Последний тест</span><span class="v">${lastTest}</span>
+      <span class="k">Генерация</span><span class="v">включается всегда, не трогается при перегенерации</span>`;
+    extra = `<div class="ks-keybox mono" title="${esc((key && key.link) || '')}">${esc(((key && key.link) || 'vless://…').slice(0, 92))}…</div>`;
+  } else {
+    title = esc(keyLabel(ks));
+    if (ks.status === 'ok') statusCell = '<span class="badge ok">● ok</span>';
+    else if (ks.status === 'expired') statusCell = '<span class="badge danger">🕐 закончился</span>';
+    else if (ks.status === 'missing') statusCell = '<span class="badge warn">▲ missing — не извлечётся</span>';
+    else if (ks.status === 'panel_unreachable') statusCell = '<span class="badge warn">▲ панель недоступна</span>';
+    else statusCell = '<span class="badge">manual</span>';
+    const link = (ks.cachedKey && ks.cachedKey.link) || ks.vlessLink || (key && key.link);
+    const lastTest = ks.lastTest
+      ? (ks.lastTest.status === 'ok'
+          ? '✅ OK за ' + ks.lastTest.ms + ' мс · ' + ks.lastTest.at
+          : '❌ ' + (ks.lastTest.error || 'ошибка') + ' · ' + ks.lastTest.at)
+      : '— тест не запускался';
+    const meta = ksMeta(ks);
+    const panel = meta.panel, inb = meta.inb;
+    rows = `<span class="k">Тип</span><span class="v">KeySource · panel (3X-UI)</span>
+      <span class="k">Сервер</span><span class="v">${esc(panel ? panel.name : '—')} <span class="mono" style="color:var(--text-secondary)">${esc(panel ? panel.host : '')}</span></span>
+      <span class="k">Инбаунд</span><span class="v mono">${esc(inb ? inb.remark : '—')}${inb && inb.port ? ' :' + inb.port : ''}</span>
+      <span class="k">Клиент</span><span class="v">${esc(ks.clientEmail || '—')}</span>
+      <span class="k">Статус</span><span class="v">${statusCell}</span>
+      ${ks.expiry ? `<span class="k">Окончание</span><span class="v">${fmtDate(ks.expiry)}</span>` : ''}
+      ${ks.traffic ? `<span class="k">Трафик (up/down)</span><span class="v mono">↑ ${fmtBytes(ks.traffic.up)} · ↓ ${fmtBytes(ks.traffic.down)}</span>` : ''}
+      <span class="k">Последний тест</span><span class="v">${lastTest}</span>
+      <span class="k">Кеш ключа</span><span class="v">${ks.cachedKey ? 'получен ' + ks.cachedKey.fetchedAt + ' (TTL 10 мин)' : 'нет кеша — ключ извлечётся при генерации'}</span>
+      <span class="k">Используется</span><span class="v">${inSubs > 0 ? 'в ' + inSubs + (inSubs === 1 ? ' подписке' : ' подписках') : 'нигде'}</span>`;
+    if (isInThisSub) {
+      extra = `<div class="ks-keybox mono" title="${esc(link || '')}">${esc((link || 'vless://…').slice(0, 92))}…</div>`;
+    }
+  }
+
+  openModal(`
+    <div class="modal-content">
+      <div class="modal-header"><h3>🔑 ${title}</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="ks-info-grid">${rows}</div>
+        ${extra}
+        <div class="modal-actions">
+          <button class="btn" onclick="closeModal()">Закрыть</button>
+          ${isManual ? '' : '<button class="btn" id="ksDelBtn" style="color:var(--danger)">Удалить KeySource</button>'}
+          <button class="btn btn-success" id="ksCopyBtn">⧉ Скопировать vless-ключ</button>
+        </div>
+      </div>
+    </div>`);
+  $('#ksCopyBtn').addEventListener('click', () => copyKey(ks, key));
+  const delBtn = $('#ksDelBtn');
+  if (delBtn) delBtn.addEventListener('click', () => deleteKeySourceFlow(ks));
+}
+function deleteKeySourceFlow(ks) {
+  const inSubs = state.subs.filter(s => s.keys.some(k => k.keySourceId === ks.id));
+  const n = inSubs.length;
+  const warn = n > 0
+    ? `<div class="warn-box">⚠ KeySource <b>${esc(keyLabel(ks))}</b> используется в <b>${n}</b> ${n === 1 ? 'подписке' : 'подписках'}: ${esc(inSubs.map(s => '«' + s.name + '»').join(', '))}.<br>Он будет удалён из всех. Конвертации в manual нет — при необходимости скопируйте ключ заранее.</div>`
+    : `<div class="form-hint">KeySource не используется ни в одной подписке.</div>`;
+  closeModal();
+  openModal(`
+    <div class="modal-content">
+      <div class="modal-header"><h3>🗑 Удалить KeySource</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        ${warn}
+        <div class="modal-actions">
+          <button class="btn" onclick="closeModal()">Отмена</button>
+          <button class="btn btn-danger" id="ksDelConfirm">Точно удалить</button>
+        </div>
+      </div>
+    </div>`);
+  $('#ksDelConfirm').addEventListener('click', () => {
+    inSubs.forEach(s => { s.keys = s.keys.filter(k => k.keySourceId !== ks.id); s.updatedAt = nowStr(); if (s.status === 'active') s.synced = false; });
+    toast('🗑 KeySource удалён' + (n ? ' из ' + n + ' ' + (n === 1 ? 'подписки' : 'подписок') : ''), 'ok');
+    closeModal(); renderLeft(); renderRight();
+  });
+}
+
+/* ── Модалка подтверждения удаления подписки ── */
+function openDeleteSubModal(sub) {
+  openModal(`
+    <div class="modal-content">
+      <div class="modal-header"><h3>🗑 Удалить подписку</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="danger-box">Точно удалить подписку <b>«${esc(sub.name)}»</b>?<br>Будут удалены ${sub.keys.length} ${sub.keys.length === 1 ? 'ключ' : (sub.keys.length < 5 ? 'ключа' : 'ключей')} и локальный файл ${sub.fileMtime ? '<code class="mono">configs-' + esc(sub.name) + '.txt</code>' : '(файл не создан)'}. Отмена удаления KeySource не предусмотрена.</div>
+        <div class="modal-actions">
+          <button class="btn" onclick="closeModal()">Отмена</button>
+          <button class="btn btn-danger" id="delSubConfirm">Удалить</button>
+        </div>
+      </div>
+    </div>`);
+  $('#delSubConfirm').addEventListener('click', () => {
+    state.subs = state.subs.filter(s => s.id !== sub.id);
+    if (state.selectedSubId === sub.id) state.selectedSubId = state.subs.length ? state.subs[0].id : null;
+    closeModal(); renderRight();
+    toast('🗑 Подписка «' + esc(sub.name) + '» удалена', 'ok');
+  });
+}
+
+/* ── Модалка отчёта о генерации (частичный успех) ── */
+function openReportModal(sub, report) {
+  let rows = '';
+  report.forEach(r => {
+    if (r.kind === 'ok') rows += `<div class="report-item ok"><span class="mark">✅</span><span>${esc(r.label)} <span class="why">— ключ извлечён (${r.ms} мс)</span></span></div>`;
+    else if (r.kind === 'manual') rows += `<div class="report-item manual"><span class="mark">🔘</span><span>${esc(r.label)} <span class="why">— manual, сохранён как есть</span></span></div>`;
+    else rows += `<div class="report-item skip"><span class="mark">⏭</span><span>${esc(r.label)} <span class="why">— ${esc(r.why)}</span></span></div>`;
+  });
+  openModal(`
+    <div class="modal-content">
+      <div class="modal-header"><h3>📄 ${esc(sub.name)} — результат</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="report-list">${rows}</div>
+        <div class="form-hint">Файл: <code class="mono">configs-${esc(sub.name)}.txt</code> · ссылка: <code class="mono">https://example.com/sub/${esc(sub.name)}</code><br>Не забудьте синхронизировать с агрегатором.</div>
+        <div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">Понятно</button></div>
+      </div>
+    </div>`);
+}
+
+/* ═══════════════════════ Левая колонка ═══════════════════════ */
+function renderLeft() {
+  const body = $('#leftBody');
+
+  if (state.emptyDemo) {
+    $('#panelKeysCount').textContent = '0 ключей';
+    body.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">📭</div>
+        <p>Нет панелей</p>
+        <p class="hint">Добавьте первую 3X-UI панель, чтобы начать собирать подписки</p>
+        <button class="btn btn-primary" onclick="toast('Демо: тут открылась бы форма добавления панели')">+ Добавить панель</button>
+      </div>`;
+    return;
+  }
+
+  if (state.loadingPanel) {
+    body.innerHTML = `<div class="loading-state"><div class="spin"></div><p>Загружаем клиенты с ${esc(panelById(state.panelId).name)}…</p></div>`;
+    return;
+  }
+
+  const panel = panelById(state.panelId);
+  const q = state.search.toLowerCase();
+  const clients = panel.clients.filter(c =>
+    !q || c.email.toLowerCase().includes(q) || c.inbounds.some(i => i.remark.toLowerCase().includes(q)));
+
+  let totalKeys = 0;
+  panel.clients.forEach(c => totalKeys += c.inbounds.length);
+  $('#panelKeysCount').textContent = totalKeys + ' ключей';
+
+  const tabsHtml = PANELS.map(p => {
+    const active = p.id === state.panelId ? ' active' : '';
+    const cnt = p.clients.reduce((a, c) => a + c.inbounds.length, 0);
+    return `<button class="panel-tab${active}" data-panel="${p.id}" title="${esc(p.name)} · ${p.host}">
+      <span class="pdot${p.reachable ? '' : ' off'}"></span>${esc(p.name)}<span class="cnt">${cnt}</span></button>`;
+  }).join('');
+
+  let bodyHtml = `<div class="panel-tabs">${tabsHtml}</div>`;
+
+  bodyHtml += `<div class="search-wrap"><span class="search-icon">🔍</span>
+    <input id="clientSearch" type="text" placeholder="Поиск клиентов и инбаундов…" value="${esc(state.search)}"></div>`;
+
+  if (clients.length === 0) {
+    bodyHtml += `<div class="empty-state">
+      <div class="icon">👤</div><p>${panel.clients.length === 0 ? 'На панели нет клиентов' : 'Клиенты не найдены'}</p>
+      <p class="hint">${panel.clients.length === 0 ? 'Добавьте клиента или выберите другую панель' : 'Попробуйте изменить запрос'}</p>
+      ${panel.clients.length === 0 ? `<button class="btn" onclick="toast('Демо: тут открылась бы форма создания клиента')">+ Новый клиент</button>` : ''}
+    </div>`;
+  } else {
+    clients.forEach(c => {
+      const enabledBadge = c.enabled ? '<span class="badge ok">вкл</span>' : '<span class="badge">выкл</span>';
+      const traffic = c.traffic ? ` · ↑${fmtBytes(c.traffic.up)} ↓${fmtBytes(c.traffic.down)}` : '';
+      const expiry = c.expiry && c.expiry !== '—' ? ' · до ' + fmtShortDate(c.expiry) : '';
+      bodyHtml += `<div class="client-card">
+        <div class="client-top">
+          <div>
+            <div class="client-name">${esc(c.email)} ${enabledBadge}</div>
+            <div class="client-inbounds">${c.inbounds.length} ${c.inbounds.length === 1 ? 'инбаунд' : (c.inbounds.length < 5 ? 'инбаунда' : 'инбаундов')}${expiry}${traffic}</div>
+          </div>
+        </div>
+        <div class="client-chips">`;
+      if (c.inbounds.length === 0) {
+        bodyHtml += `<div class="client-noinb">нет инбаундов — привяжите инбаунд к клиенту на панели</div>`;
+      } else {
+        c.inbounds.forEach(inb => {
+          const ksId = ksIdFor(panel.id, c.email, inb.inboundId);
+          const ks = KEY_SOURCES[ksId];
+          const st = ks ? ks.status : 'ok';
+          const inSub = selectedSub() && ksId && selectedSub().keys.some(k => k.keySourceId === ksId);
+          bodyHtml += `<button class="inb-chip${inSub ? ' added' : ''}" data-ks="${ksId || ''}"
+            title="${esc(panel.name)} · ${esc(inb.remark)} :${inb.port} · ${esc(c.email)}${ks && ks.expiry ? ' · до ' + fmtDate(ks.expiry) : ''}${inSub ? '\nуже добавлено в «' + esc(selectedSub().name) + '»' : ''}">
+            <span class="idot ${st}"></span><span class="inb-name">${esc(inb.remark)}</span><span class="inb-port">:${inb.port}</span>
+            ${inSub ? '<span class="inb-ok" style="font-size:10px">✓</span>' : ''}
+          </button>`;
+        });
+      }
+      bodyHtml += `</div></div>`;
+    });
+  }
+
+  body.innerHTML = bodyHtml;
+  $('#panelKeysCount').textContent = totalKeys + ' ключей';
+
+  body.querySelectorAll('.panel-tab').forEach(t => t.addEventListener('click', () => switchPanel(t.dataset.panel)));
+  const inp = body.querySelector('#clientSearch');
+  if (inp) inp.addEventListener('input', (e) => { state.search = e.target.value; renderLeft(); });
+  body.querySelectorAll('.inb-chip').forEach(ch => ch.addEventListener('click', () => {
+    const ksId = ch.dataset.ks;
+    if (!ksId) { toast('⚠️ Не удалось определить KeySource', 'err'); return; }
+    addKeySource(ksId);
+  }));
+}
+
+function switchPanel(id) {
+  if (id === state.panelId) return;
+  state.panelId = id;
+  state.loadingPanel = true;
+  renderLeft();
+  setTimeout(() => { state.loadingPanel = false; renderLeft(); }, 600);
+}
+
+/* ═══════════════════════ Добавление KeySource в подписку ═══════════════════════ */
+function addKeySource(ksId) {
+  const ks = KEY_SOURCES[ksId];
+  const sub = selectedSub();
+
+  if (state.emptyDemo) {
+    toast('⚠️ Демо пустых состояний — верните данные, чтобы добавлять ключи', 'warn');
+    return;
+  }
+  if (!sub) {
+    toast('⚠️ Подписка не выбрана — создайте новую или выберите из списка', 'warn');
+    flashTabs();
+    if (state.subs.length === 0) setTimeout(openNewSubModal, 600);
+    return;
+  }
+  if (sub.keys.some(k => k.keySourceId === ksId)) {
+    toast('⚠️ Уже добавлено в «' + esc(sub.name) + '»', 'warn');
+    flashChipInSub(ksId);
+    return;
+  }
+
+  sub.keys.push({ id: 'k' + Date.now(), keySourceId: ksId });
+  sub.updatedAt = nowStr();
+  if (sub.status === 'active') sub.synced = false;   // появился бейдж «изменено — требуется синк»
+
+  const label = (ks.type === 'panel')
+    ? esc(ksShort(ks))
+    : esc(ks.label || 'manual');
+  toast('✅ Добавлено: ' + label + ' → «' + esc(sub.name) + '»', 'ok');
+  renderLeft();
+  renderRight();
+  setTimeout(() => flashChipInSub(ksId), 60);
+}
+function flashChipInSub(ksId) {
+  const el = document.querySelector('.ks-chip[data-ks="' + ksId + '"]');
+  if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+}
+function flashTabs() {
+  const area = $('#subTabsArea');
+  area.classList.remove('flash'); void area.offsetWidth; area.classList.add('flash');
+}
+
+/* ═══════════════════════ Правая колонка ═══════════════════════ */
+function renderRight() {
+  $('#subsCount').textContent = state.emptyDemo ? 0 : state.subs.length;
+  renderSubTabs();
+  renderSubDetail();
+}
+function renderSubTabs() {
+  const wrap = $('#subTabs');
+  if (state.emptyDemo || state.subs.length === 0) { wrap.innerHTML = ''; return; }
+  const sorted = [...state.subs].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  wrap.innerHTML = sorted.map(s => {
+    const warn = (s.status === 'active' && !s.synced) ? ' ⚠' : '';
+    return `<option value="${s.id}"${s.id === state.selectedSubId ? ' selected' : ''}>${esc(s.name)}${warn} · ${s.keys.length}</option>`;
+  }).join('');
+  wrap.onchange = () => {
+    state.selectedSubId = wrap.value;
+    renderRight();
+  };
+}
+
+function renderSubDetail() {
+  const el = $('#subDetail');
+
+  if (state.emptyDemo) {
+    el.innerHTML = `<div class="empty-state" style="margin-top:40px">
+      <div class="icon">📡</div><p>Нет подписок</p>
+      <p class="hint">Создайте первую — затем добавляйте чипсы KeySource слева</p>
+      <button class="btn btn-primary" onclick="toast('Демо: верните данные, чтобы создать подписку')">+ Новая подписка</button>
+    </div>`;
+    return;
+  }
+
+  const sub = selectedSub();
+
+  if (!sub) {
+    el.innerHTML = `<div class="empty-state" style="margin-top:40px">
+      <div class="icon">📡</div><p>Нет подписок</p>
+      <p class="hint">Создайте первую — затем добавляйте чипсы KeySource слева</p>
+      <button class="btn btn-primary" onclick="openNewSubModal()">+ Новая подписка</button>
+    </div>`;
+    return;
+  }
+
+  const statusBadge = sub.status === 'active'
+    ? '<span class="badge ok">● включен</span>'
+    : '<span class="badge">○ черновик</span>';
+
+  const syncBadge = sub.status === 'active'
+    ? (sub.synced
+        ? '<span class="badge ok">✓ синхронизировано</span>'
+        : '<span class="badge warn">⚠ изменено — требуется синк</span>')
+    : '<span class="badge">файл не создан</span>';
+
+  const fileInfo = sub.status === 'active'
+    ? `<div class="row"><span>Файл:</span><code>configs-${esc(sub.name)}.txt</code><span>·</span><span>Ссылка:</span><code>https://example.com/sub/${esc(sub.name)}</code></div>
+       <div class="row"><span>Агрегатор (Last-Modified):</span><code>${esc(sub.aggrLastModified || '—')}</code>
+       <span>·</span><span>Локально (mtime):</span><code>${esc(sub.fileMtime || '—')}</code>
+       ${sub.synced ? '<span class="sync-ok">— версии совпадают</span>' : '<span class="sync-warn">— локальная новее, нужен rsync</span>'}</div>`
+    : `<div class="row"><span class="sync-warn">Файл не создан — нажмите «Создать подписку», когда добавлены чипсы</span></div>`;
+
+  const hasKeys = sub.keys.length > 0;
+  const genLabel = sub.status === 'active' ? '🔄 Перегенерировать' : '🚀 Создать подписку';
+  const genDisabled = !hasKeys || state.generating;
+
+  el.innerHTML = `
+    <div class="sub-detail-header">
+      <div class="sub-detail-title">
+        <h3>${esc(sub.name)}</h3>
+        ${statusBadge}${syncBadge}
+        <span style="color:var(--text-secondary);font-size:12px;margin-left:auto;white-space:nowrap">изменена: ${esc(sub.updatedAt)}</span>
+      </div>
+      <div class="sub-detail-sub">
+        <span>🔑 ${sub.keys.length} ${sub.keys.length === 1 ? 'ключ' : (sub.keys.length < 5 ? 'ключа' : 'ключей')} · порядок = порядок добавления</span>
+      </div>
+      <div class="sub-actions">
+        <button class="btn btn-success" id="btnGenerate" ${genDisabled ? 'disabled' : ''}>${state.generating ? '<span class="spin"></span> Генерируем…' : genLabel}</button>
+        <button class="btn" id="btnTestSub" ${!hasKeys ? 'disabled' : ''}>${state.testingSub ? '<span class="spin"></span> Тестируем…' : '🧪 Тест подписки'}</button>
+        <button class="btn btn-sm" id="btnCopySubLink" ${sub.status !== 'active' ? 'disabled' : ''} title="Скопировать ссылку подписки">⧉ ссылка</button>
+        <button class="btn btn-sm btn-danger" id="btnDelSub" title="Удалить подписку">🗑</button>
+      </div>
+    </div>
+    <div class="sub-detail-body">
+      <div id="keysArea"></div>
+      <div class="test-block">
+        <div class="test-block-head"><h4>🧪 Тестирование</h4>
+          <span style="font-size:12px;color:var(--text-secondary)">этап 1 — тест каждого KeySource (test-single) · этап 2 — тест подписки перед синком</span></div>
+        <div class="form-hint" style="margin-bottom:6px">Тест каждого ключа — кнопка <b>🧪</b> на чипсе или в модалке деталей. «Тест подписки» гоняет все ключи через демон vlesssubtest.</div>
+        <div id="subTestResults"></div>
+      </div>
+      <div class="file-info">${fileInfo}</div>
+    </div>`;
+
+  renderKeysArea($('#keysArea'), sub);
+  bindDetailButtons(sub);
+}
+
+function renderKeysArea(container, sub) {
+  if (sub.keys.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="padding:22px">
+      <div class="icon">🧩</div><p>Подписка пуста</p>
+      <p class="hint">Кликайте по чипсам инбаундов слева — KeySource будет добавляться сюда зелёной чипсой</p>
+    </div>`;
+    return;
+  }
+  container.innerHTML = sub.keys.map(key => chipHtml(key)).join('');
+  container.querySelectorAll('.ks-chip').forEach(chip => {
+    const ksId = chip.dataset.ks;
+    const key = ksId ? keyOf(sub, ksId) : sub.keys.find(k => !k.keySourceId);
+    chip.addEventListener('click', () => {
+      if (ksId) openKsModal(KEY_SOURCES[ksId], null);
+      else openKsModal(null, key || { link: LEGACY_KEY.link });
+    });
+    chip.querySelectorAll('.ks-ico').forEach(b => b.addEventListener('click', (e) => e.stopPropagation()));
+    const copyBtn = chip.querySelector('.js-copy');
+    if (copyBtn) copyBtn.addEventListener('click', () => copyKey(ksId ? KEY_SOURCES[ksId] : null, key));
+    const delBtn = chip.querySelector('.js-del');
+    if (delBtn) delBtn.addEventListener('click', () => removeKeyFromSub(sub.id, key));
+    const testBtn = chip.querySelector('.js-test');
+    if (testBtn) testBtn.addEventListener('click', () => runPerKeyTest(ksId, chip));
+  });
+}
+function keyOf(sub, ksId) { return sub.keys.find(k => k.keySourceId === ksId); }
+
+function chipHtml(key) {
+  const ks = key.keySourceId ? KEY_SOURCES[key.keySourceId] : null;
+
+  /* manual / legacy — серая чипса */
+  if (!ks) {
+    const res = state.perKeyResults['legacy'] || null;
+    const testing = state.keyBeingTested === 'legacy';
+    let testHtml;
+    if (testing) testHtml = '<span class="ks-testres run"><span class="spin" style="width:9px;height:9px;border-width:1.5px"></span> тест…</span>';
+    else {
+      let resTxt = '', resCls = '';
+      if (res) { resCls = res.ok ? 'ok' : 'fail'; resTxt = res.ok ? ('✓ ' + res.ms + ' мс') : ('✗ ' + (res.error || 'ошибка')); }
+      testHtml = '<button class="ks-ico js-test" title="Тест ключа">🧪</button>' + (resTxt ? ' <span class="ks-testres ' + resCls + '">' + esc(resTxt) + '</span>' : '');
+    }
+    return `<div class="ks-chip ks-manual" data-ks="" title="manual · клик — детали">
+      <span class="ks-dot manual"></span>
+      <span class="ks-label"><span class="ks-server ell">manual</span><span class="ks-sep">·</span><span class="ks-inbound ell">${esc(LEGACY_KEY.label.replace('manual · ', ''))}</span></span>
+      <span class="ks-meta">
+        <span class="ks-status manual">manual</span>
+        ${testHtml}
+        <button class="ks-ico js-copy" title="Скопировать ключ">⧉</button>
+        <button class="ks-ico del js-del" title="Удалить из подписки">×</button>
+      </span>
+    </div>`;
+  }
+
+  const st = ks.status;
+  const cls = 'ks-chip ks-' + (st === 'ok' ? '' : st);
+  const dot = `<span class="ks-dot ${st}"></span>`;
+  const statusTxt = st === 'ok' ? '<span class="ks-status ok">ok</span>'
+    : st === 'expired' ? '<span class="ks-status expired">закончился</span>'
+    : st === 'missing' ? '<span class="ks-status missing">missing</span>'
+    : '<span class="ks-status missing">панель недоступна</span>';
+
+  let center = '';
+  if (st === 'ok') {
+    center = `<span class="ks-traffic" title="Трафик (clientStats 3X-UI)">↑${fmtBytes(ks.traffic ? ks.traffic.up : 0)} ↓${fmtBytes(ks.traffic.down || 0)}</span>
+      <span class="ks-expiry" title="Окончание">до ${fmtShortDate(ks.expiry)}</span>`;
+  } else if (st === 'expired') {
+    center = `<svg class="ico-clock" width="14" height="14" viewBox="0 0 16 16" title="Срок истёк ${fmtDate(ks.expiry)}"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span class="ks-expiry">истёк ${fmtShortDate(ks.expiry)}</span>`;
+  } else if (st === 'missing') {
+    center = `<svg class="ico-warn" width="14" height="14" viewBox="0 0 16 16" title="Клиент/инбаунд удалён на панели"><path d="M8 1.5 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6v3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="12" r="0.9" fill="currentColor"/></svg>
+      <span class="ks-note">клиент не найден на панели</span>`;
+  } else {
+    center = `<svg class="ico-warn" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1.5 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6v3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="12" r="0.9" fill="currentColor"/></svg>
+      <span class="ks-note">панель недоступна (таймаут 10 с)</span>`;
+  }
+
+  /* результат теста демона: кнопка теста ВСЕГДА + последний результат рядом */
+  const res = state.perKeyResults[ks.id] || (ks.lastTest ? { ok: ks.lastTest.status === 'ok', ms: ks.lastTest.ms, error: ks.lastTest.error } : null);
+  const testing = state.keyBeingTested === ks.id;
+  let testHtml;
+  if (testing) testHtml = '<span class="ks-testres run"><span class="spin" style="width:9px;height:9px;border-width:1.5px"></span> тест…</span>';
+  else {
+    let resTxt = '', resCls = '';
+    if (res) { resCls = res.ok ? 'ok' : 'fail'; resTxt = res.ok ? ('✓ ' + res.ms + ' мс') : ('✗ ' + (res.error || 'ошибка')); }
+    testHtml = '<button class="ks-ico js-test" title="Тест ключа (test-single)">🧪</button>' + (resTxt ? ' <span class="ks-testres ' + resCls + '" title="Тест демоном vlesssubtest">' + esc(resTxt) + '</span>' : '');
+  }
+
+  const meta = ksMeta(ks);
+  const panel = meta.panel;
+  const label = `<span class="ks-server">${esc(panel ? panel.name : '?')}</span><span class="ks-sep">·</span>
+    <span class="ks-inbound">${esc(meta.inb ? meta.inb.remark : '—')} :${meta.inb ? meta.inb.port : ''}</span><span class="ks-sep">·</span><span class="ks-email">${esc(ks.clientEmail)}</span>`;
+
+  return `<div class="${cls.trim()}" data-ks="${ks.id}" title="Клик — детали KeySource">
+      ${dot}
+      <span class="ks-label">${label}</span>
+      <span class="ks-meta">
+        ${statusTxt}
+        ${center}
+        ${testHtml}
+        <button class="ks-ico js-copy" title="Скопировать vless-ключ">⧉</button>
+        <button class="ks-ico del js-del" title="Удалить из подписки">×</button>
+      </span>
+    </div>`;
+}
+
+/* удаление SubKey из подписки (крестик на чипсе) */
+function removeKeyFromSub(subId, key) {
+  const sub = getSub(subId);
+  if (!sub || !key) return;
+  sub.keys = sub.keys.filter(k => k.id !== key.id);
+  sub.updatedAt = nowStr();
+  if (sub.status === 'active') sub.synced = false;
+  renderRight();
+  toast('🗑 Ключ удалён из «' + esc(sub.name) + '»', 'ok');
+}
+
+/* ═══════════════════════ Тесты ═══════════════════════ */
+function runPerKeyTest(ksId, chipEl) {
+  const ks = ksId ? KEY_SOURCES[ksId] : null;
+  if (state.keyBeingTested) return;
+  state.keyBeingTested = ksId || 'legacy';
+  renderRight();
+  setTimeout(() => {
+    state.keyBeingTested = null;
+    const ok = ks ? ks.status === 'ok' : true;
+    const ms = 600 + Math.floor(Math.random() * 700);
+    state.perKeyResults[ksId || 'legacy'] = ok
+      ? { ok: true, ms }
+      : { ok: false, error: ks.status === 'expired' ? 'срок истёк — ключ не работает' : 'клиент не найден на панели (404)' };
+    renderRight();
+    toast(ok ? '✅ Тест: ' + ms + ' мс' : '❌ Тест не пройден: ' + (state.perKeyResults[ksId || 'legacy'].error), ok ? 'ok' : 'err');
+  }, 1100);
+}
+
+function runSubTest() {
+  const sub = selectedSub();
+  if (!sub || state.testingSub) return;
+  state.testingSub = true;
+  $('#btnTestSub').innerHTML = '<span class="spin"></span> Тестируем…';
+  $('#btnTestSub').disabled = true;
+
+  setTimeout(() => {
+    state.testingSub = false;
+    const rows = sub.keys.map(k => {
+      const ks = k.keySourceId ? KEY_SOURCES[k.keySourceId] : null;
+      if (!ks) return { label: 'manual (legacy)', ok: true, ms: 900 + Math.floor(Math.random() * 400) };
+      if (ks.status === 'ok') return { label: ksShort(ks), ok: true, ms: 800 + Math.floor(Math.random() * 500) };
+      if (ks.status === 'expired') return { label: ksShort(ks), ok: false, err: 'ключ закончился ' + fmtShortDate(ks.expiry) };
+      return { label: ksShort(ks), ok: false, err: 'клиент не найден на панели' };
+    });
+    const okN = rows.filter(r => r.ok).length;
+    const table = `<div class="test-summary"><span>Результат: <b class="ok">${okN} OK</b> / <b class="fail">${rows.length - okN} не прошли</b></span>
+      <span style="color:var(--text-secondary)">через vlesssubtest · ${new Date().toLocaleTimeString('ru-RU')}</span></div>
+      <table class="test-table"><thead><tr><th>KeySource</th><th>Результат</th><th>Время</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td>${esc(r.label)}</td><td class="${r.ok ? 'ok' : 'fail'}">${r.ok ? '✓ OK' : '✗ ' + esc(r.err || 'ошибка')}</td><td>${r.ok ? r.ms + ' мс' : '—'}</td></tr>`).join('')}
+      </tbody></table>`;
+    const resEl = $('#subTestResults');
+    if (resEl) resEl.innerHTML = '<div class="test-results">' + table + '</div>';
+    /* вернуть кнопку в исходное состояние (без полного перерендера, чтобы не стереть результаты) */
+    const btn = $('#btnTestSub');
+    if (btn) { btn.disabled = false; btn.innerHTML = '🧪 Тест подписки'; }
+    toast('🧪 Тест подписки завершён: ' + okN + '/' + rows.length, okN === rows.length ? 'ok' : 'warn');
+  }, 1500);
+}
+
+/* ═══════════════════════ Генерация подписки ═══════════════════════ */
+function generateSub() {
+  const sub = selectedSub();
+  if (!sub || sub.keys.length === 0 || state.generating) return;
+  state.generating = true;
+  const btn = $('#btnGenerate');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Генерируем…';
+
+  setTimeout(() => {
+    state.generating = false;
+    const report = sub.keys.map(k => {
+      const ks = k.keySourceId ? KEY_SOURCES[k.keySourceId] : null;
+      if (!ks) return { kind: 'manual', label: 'manual (legacy)', ms: 0 };
+      const st = ks.status;
+      if (st === 'ok') return { kind: 'ok', label: ksShort(ks), ms: 700 + Math.floor(Math.random() * 600) };
+      if (st === 'expired') return { kind: 'skip', label: ksShort(ks), why: 'срок истёк ' + fmtShortDate(ks.expiry) + ' — не включён' };
+      if (st === 'missing') return { kind: 'skip', label: ksShort(ks), why: 'клиент не найден на панели — пропущен' };
+      return { kind: 'skip', label: ksShort(ks), why: 'панель недоступна (таймаут 10 с)' };
+    });
+
+    sub.status = 'active';
+    sub.synced = false;                      // файл появился → «требуется синк»
+    sub.updatedAt = nowStr();
+    sub.fileMtime = sub.updatedAt;
+    sub.aggrLastModified = '2026-08-08 18:20';
+
+    const okN = report.filter(r => r.kind !== 'skip').length;
+    const skipN = report.length - okN;
+    openReportModal(sub, report);
+    toast(skipN === 0
+      ? '✅ Подписка создана: configs-' + esc(sub.name) + '.txt (' + okN + ' ключей)'
+      : '⚠️ Готово с пропусками: ' + okN + ' включено, ' + skipN + ' пропущено', skipN === 0 ? 'ok' : 'warn');
+    renderRight();
+  }, 1400);
+}
+
+/* ═══════════════════════ Синк с агрегатором ═══════════════════════ */
+function syncAll() {
+  const active = state.subs.filter(s => s.status === 'active' && !s.synced);
+  if (active.length === 0) { toast('✓ Всё уже синхронизировано', 'ok'); return; }
+  toast('⟳ rsync на example.com…', '');
+  setTimeout(() => {
+    const now = nowStr();
+    active.forEach(s => { s.synced = true; s.aggrLastModified = now; });
+    renderRight();
+    toast('✅ Синхронизировано: ' + active.map(s => '«' + s.name + '»').join(', '), 'ok');
+  }, 1200);
+}
+
+/* ═══════════════════════ Bind кнопок правой колонки ═══════════════════════ */
+function bindDetailButtons(sub) {
+  const g = $('#btnGenerate'); if (g) g.addEventListener('click', generateSub);
+  const t = $('#btnTestSub'); if (t) t.addEventListener('click', runSubTest);
+  const c = $('#btnCopySubLink');
+  if (c) c.addEventListener('click', async () => {
+    const ok = await copyText('https://example.com/sub/' + sub.name);
+    toast(ok ? '📋 Ссылка подписки скопирована: /sub/' + esc(sub.name) : '⚠️ Не удалось скопировать', ok ? 'ok' : 'err');
+  });
+  const d = $('#btnDelSub'); if (d) d.addEventListener('click', () => openDeleteSubModal(sub));
+}
+
+/* ═══════════════════════ Демо пустых состояний ═══════════════════════ */
+function toggleEmptyDemo() {
+  state.emptyDemo = !state.emptyDemo;
+  const btn = $('#btnDemoEmpty');
+  btn.classList.toggle('btn-primary', state.emptyDemo);
+  btn.textContent = state.emptyDemo ? '✕ вернуть данные' : '🧪 пустые состояния';
+  if (state.emptyDemo) {
+    state.search = '';
+    $('#leftBody').innerHTML = '';
+    renderLeft(); renderRight();
+  } else {
+    renderLeft(); renderRight();
+  }
+}
+
+/* ═══════════════════════ Init ═══════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  $('#btnNewSub').addEventListener('click', openNewSubModal);
+  $('#btnSyncAll').addEventListener('click', syncAll);
+  $('#btnDemoEmpty').addEventListener('click', toggleEmptyDemo);
+  renderLeft();
+  renderRight();
+});
+</script>
+</body>
+</html>
