@@ -1452,6 +1452,91 @@ func (h *Handlers) regenerateKeys(keys []SubKey, report *GenerationReport) ([]Su
 
 // ─── Sync ───
 
+// RegenerateAllSubscriptions перегенерирует все подписки, в которых есть хотя бы
+// один panel-KeySource (свежие ключи с панелей). Подписки только с manual/legacy
+// ключами пропускаются. Возвращает отчёт по каждой подписке.
+func (h *Handlers) RegenerateAllSubscriptions(w http.ResponseWriter, r *http.Request) {
+	subs, err := h.storage.ListSubscriptions()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to load subscriptions")
+		return
+	}
+
+	type subResult struct {
+		Name        string `json:"name"`
+		Regenerated bool   `json:"regenerated"`
+		Reason      string `json:"reason,omitempty"`
+		Included    int    `json:"included,omitempty"`
+		SkippedKeys int    `json:"skippedKeys,omitempty"`
+	}
+
+	results := []subResult{}
+	regenerated := 0
+	skipped := 0
+
+	for i := range subs {
+		sub := &subs[i]
+
+		// Есть ли хоть один panel KeySource?
+		hasPanel := false
+		for _, k := range sub.Keys {
+			if k.KeySourceID == nil {
+				continue
+			}
+			if ks, err := h.storage.GetKeySource(*k.KeySourceID); err == nil && ks.Type == "panel" {
+				hasPanel = true
+				break
+			}
+		}
+		if !hasPanel {
+			skipped++
+			results = append(results, subResult{Name: sub.Name, Regenerated: false, Reason: "нет panel KeySource"})
+			continue
+		}
+
+		report := &GenerationReport{Items: []GenerationReportItem{}}
+		keys, err := h.regenerateKeys(sub.Keys, report)
+		if err != nil {
+			skipped++
+			results = append(results, subResult{Name: sub.Name, Regenerated: false, Reason: err.Error()})
+			continue
+		}
+
+		sub.Keys = keys
+		sub.UpdatedAt = nowStr()
+		if len(keys) == 0 {
+			sub.Status = "draft"
+			_ = h.storage.RemoveSubscriptionFile(sub.Name)
+		} else {
+			sub.Status = "active"
+			if err := h.storage.WriteSubscriptionFile(sub.Name, keys); err != nil {
+				skipped++
+				results = append(results, subResult{Name: sub.Name, Regenerated: false, Reason: "file write: " + err.Error()})
+				continue
+			}
+		}
+		if err := h.storage.UpsertSubMeta(*sub); err != nil {
+			skipped++
+			results = append(results, subResult{Name: sub.Name, Regenerated: false, Reason: err.Error()})
+			continue
+		}
+
+		regenerated++
+		results = append(results, subResult{
+			Name:        sub.Name,
+			Regenerated: true,
+			Included:    countKind(report.Items, "ok") + countKind(report.Items, "manual"),
+			SkippedKeys: countKind(report.Items, "skip"),
+		})
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"regenerated": regenerated,
+		"skipped":     skipped,
+		"results":     results,
+	})
+}
+
 // SyncToAggregator runs the rsync script (same mechanism as before).
 func (h *Handlers) SyncToAggregator(w http.ResponseWriter, r *http.Request) {
 	script := h.config.SyncScript

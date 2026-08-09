@@ -30,6 +30,7 @@ export const api = {
   createSubscription: (data) => request('/subscriptions', { method: 'POST', body: JSON.stringify(data) }),
   getSubscription: (id) => request(`/subscriptions/${id}`),
   updateSubscription: (id, data) => request(`/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  regenerateAllSubscriptions: () => request('/subscriptions/regenerate-all', { method: 'POST' }),
   deleteSubscription: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
   getSubscriptionRaw: async (id) => {
     const res = await fetch(`${API_BASE}/subscriptions/${id}/raw`);

@@ -100,7 +100,7 @@ export function fmtDateTime(s) {
 }
 
 // ─── Header ───
-export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onDeletePanel, onSyncAll, syncing }) {
+export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onDeletePanel, onSyncAll, syncing, onRegenerateAll, regenerating }) {
   return (
     <header className="header">
       <div className="header-left">
@@ -109,6 +109,9 @@ export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onD
         <button className="btn btn-primary btn-sm" onClick={onAddPanel}>+ Панель</button>
       </div>
       <div className="header-right">
+        <button className="btn btn-sm" onClick={onRegenerateAll} disabled={regenerating} title="Свежие ключи с панелей для всех подписок с panel-KeySource">
+          {regenerating ? <span className="spin small"></span> : '🔄'} Перегенерировать все
+        </button>
         <button className="btn btn-sm btn-success" onClick={onSyncAll} disabled={syncing}>
           {syncing ? '⟳ Синхронизация…' : '⟳ Синк с агрегатором'}
         </button>

@@ -52,6 +52,7 @@ func main() {
 		// Subscriptions
 		r.Get("/subscriptions", handlers.ListSubscriptions)
 		r.Post("/subscriptions", handlers.CreateSubscription)
+		r.Post("/subscriptions/regenerate-all", handlers.RegenerateAllSubscriptions)
 		r.Get("/subscriptions/{id}", handlers.GetSubscription)
 		r.Put("/subscriptions/{id}", handlers.UpdateSubscription)
 		r.Delete("/subscriptions/{id}", handlers.DeleteSubscription)

@@ -370,6 +370,24 @@ function AppInner() {
   };
 
   // ─── Sync with aggregator ───
+  const [regenerating, setRegenerating] = useState(false);
+
+  const handleRegenerateAll = () => {
+    if (regenerating) return;
+    if (!window.confirm('Перегенерировать все подписки с panel-KeySource?\nСвежие ключи будут запрошены с панелей (manual-ключи сохранятся).')) return;
+    setRegenerating(true);
+    api.regenerateAllSubscriptions()
+      .then(res => {
+        const done = res.regenerated || 0;
+        const skipped = res.skipped || 0;
+        const failed = (res.results || []).filter(x => !x.regenerated && x.reason && x.reason !== 'нет panel KeySource').length;
+        showToast(`✅ Перегенерировано: ${done}${skipped ? `, пропущено: ${skipped}` : ''}${failed ? `, ошибок: ${failed}` : ''}`);
+        loadData();
+      })
+      .catch(err => showToast('⚠️ ' + (err.message || 'ошибка перегенерации')))
+      .finally(() => setRegenerating(false));
+  };
+
   const handleSyncAll = () => {
     if (syncing) return;
     setSyncing(true);
@@ -410,6 +428,8 @@ function AppInner() {
         onDeletePanel={handleDeletePanel}
         onSyncAll={handleSyncAll}
         syncing={syncing}
+        onRegenerateAll={handleRegenerateAll}
+        regenerating={regenerating}
       />
 
       <div className="main">
