@@ -119,12 +119,12 @@ export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onD
 }
 
 // ─── Client card with inbound chips (left column) ───
-export function ClientCard({ client, inbounds, keySources, activeSubKeys, onChipClick, onOpenClient, panelName }) {
+export function ClientCard({ client, inbounds, keySources, activeSubKeys, onChipClick, onOpenClient, panelName, panelId }) {
   const chipInbounds = (inbounds || []).filter(ib => (client.inboundIds || []).includes(ib.id));
 
   const statusFor = (inboundId) => {
     const ks = (keySources || []).find(k =>
-      k.type === 'panel' && k.clientEmail === client.email && k.inboundId === inboundId);
+      k.type === 'panel' && k.panelId === panelId && k.clientEmail === client.email && k.inboundId === inboundId);
     return ks || null;
   };
 

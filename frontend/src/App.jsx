@@ -426,6 +426,11 @@ function AppInner() {
                 <input type="text" placeholder="Поиск клиентов и инбаундов…"
                   value={clientSearch} onChange={e => setClientSearch(e.target.value)} />
               </div>
+              <div className="add-target">
+                {activeSub
+                  ? <>Клики ➜ подписка <b>«{activeSub.name}»</b></>
+                  : <>Клики ➜ создадут подписку</>}
+              </div>
             </div>
           )}
           <div className="col-body">
@@ -466,6 +471,7 @@ function AppInner() {
                       panelName={panel?.name || ''}
                       onChipClick={handleChipClick}
                       onOpenClient={setEditingClient}
+                      panelId={panel?.id || ''}
                     />
                   ))
                 )}

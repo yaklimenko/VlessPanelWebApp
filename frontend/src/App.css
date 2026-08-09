@@ -107,6 +107,12 @@ input, button, select, textarea { font-family: inherit; font-size: inherit; colo
   flex-shrink: 0; padding: 8px 12px 6px; border-bottom: 1px solid var(--border);
   background: var(--bg); z-index: 2;
 }
+.add-target {
+  margin: 6px 2px 2px; font-size: 11px; color: var(--text-secondary);
+  background: rgba(88,166,255,.10); border: 1px solid rgba(88,166,255,.25);
+  border-radius: 8px; padding: 4px 8px;
+}
+.add-target b { color: var(--accent); font-weight: 600; }
 .column-footer {
   padding: 10px 16px; border-top: 1px solid var(--border);
   flex-shrink: 0; background: var(--bg);
