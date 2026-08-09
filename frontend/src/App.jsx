@@ -61,8 +61,9 @@ function AppInner() {
 
   // ─── Sync currentPanelId with panels ───
   useEffect(() => {
-    if (panels.length === 0) setCurrentPanelId(null);
-    else if (currentPanelId && !panels.some(p => p.id === currentPanelId)) setCurrentPanelId(panels[0].id);
+    if (panels.length > 0 && currentPanelId && !panels.some(p => p.id === currentPanelId)) {
+      setCurrentPanelId(panels[0].id);
+    }
   }, [panels, currentPanelId]);
 
   // ─── Persist selected panel/subscription to localStorage ───
