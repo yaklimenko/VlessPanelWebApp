@@ -23,19 +23,40 @@ import (
 )
 
 // Handlers groups all HTTP handlers
+type syncCacheEntry struct {
+	synced    *bool
+	checkedAt string
+}
+
 type Handlers struct {
 	storage  *Storage
 	panelAPI *PanelAPI
 	config   Config
+
+	syncMu     sync.Mutex
+	syncNeeded bool                 // true после любой мутации (нужна сверка с агрегатором)
+	syncCache  map[string]syncCacheEntry // последние вычисленные статусы синка по подпискам
 }
 
 // NewHandlers creates a new Handlers instance
 func NewHandlers(storage *Storage, panelAPI *PanelAPI, config Config) *Handlers {
-	return &Handlers{
-		storage:  storage,
-		panelAPI: panelAPI,
-		config:   config,
+	h := &Handlers{
+		storage:    storage,
+		panelAPI:   panelAPI,
+		config:     config,
+		syncNeeded: true, // при старте статус неизвестен — первая сверка будет реальной
+		syncCache:  make(map[string]syncCacheEntry),
 	}
+	storage.SetOnChange(h.markSyncNeeded)
+	return h
+}
+
+// markSyncNeeded поднимает флаг «нужна сверка с агрегатором» после любой мутации
+// (ключей, подписок, файлов). Сбрасывается после полной проверки или синка.
+func (h *Handlers) markSyncNeeded() {
+	h.syncMu.Lock()
+	h.syncNeeded = true
+	h.syncMu.Unlock()
 }
 
 // respondJSON writes a JSON response
@@ -422,11 +443,17 @@ func (h *Handlers) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-			h.enrichSync(&subs[i])
+				h.enrichSync(&subs[i])
 			}(i)
 		}
 	}
 	wg.Wait()
+
+	// Только что выполнили полную сверку с агрегатором (или взяли из кэша) —
+	// кэш актуален, флаг «нужен синк» сбрасываем до следующей мутации.
+	h.syncMu.Lock()
+	h.syncNeeded = false
+	h.syncMu.Unlock()
 
 	respondJSON(w, http.StatusOK, subs)
 }
@@ -1470,6 +1497,24 @@ func (h *Handlers) SyncToAggregator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Синк прошёл: локальные файлы = агрегатор. Флаг сбрасываем, кэш заполняем
+	// актуальными статусами без лишних HTTP-запросов (активные подписки — synced).
+	h.syncMu.Lock()
+	h.syncNeeded = false
+	now := time.Now().UTC().Format("2006-01-02T15:04:05Z07:00")
+	h.syncMu.Unlock()
+
+	if subs, err := h.storage.ListSubscriptions(); err == nil {
+		h.syncMu.Lock()
+		for i := range subs {
+			if subs[i].Status == "active" {
+				synced := true
+				h.syncCache[subs[i].Name] = syncCacheEntry{synced: &synced, checkedAt: now}
+			}
+		}
+		h.syncMu.Unlock()
+	}
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "synced",
 		"output": tailString(string(out), 2000),
@@ -1480,6 +1525,10 @@ func (h *Handlers) SyncToAggregator(w http.ResponseWriter, r *http.Request) {
 // aggregator's content (GET /sub/{name}, base64) with the local file.
 // The aggregator does not emit Last-Modified (nginx → FastAPI), so we compare
 // content instead of timestamps — more accurate anyway.
+//
+// Результаты кэшируются в памяти: если с момента последней полной сверки не
+// было мутаций (syncNeeded == false), статус отдаётся из кэша без HTTP-запроса
+// к агрегатору.
 func (h *Handlers) enrichSync(sub *Subscription) {
 	if sub == nil {
 		return
@@ -1491,6 +1540,16 @@ func (h *Handlers) enrichSync(sub *Subscription) {
 		return
 	}
 
+	h.syncMu.Lock()
+	needed := h.syncNeeded
+	entry, ok := h.syncCache[sub.Name]
+	h.syncMu.Unlock()
+	if !needed && ok {
+		sub.Synced = entry.synced
+		sub.AggrLastModified = entry.checkedAt
+		return
+	}
+
 	contentMatch, checkedAt, err := h.aggregatorMatchesLocal(sub.Name)
 	if err != nil || !contentMatch {
 		sub.AggrLastModified = checkedAt
@@ -1498,15 +1557,17 @@ func (h *Handlers) enrichSync(sub *Subscription) {
 	if err != nil {
 		// Aggregator unreachable → unknown.
 		sub.Synced = nil
-		return
+	} else {
+		synced := contentMatch
+		if sub.UpdatedAt != "" && sub.FileMtime != "" && sub.UpdatedAt > sub.FileMtime {
+			synced = false // metadata changed after the file was written → needs regenerate
+		}
+		sub.Synced = &synced
 	}
-	sub.AggrLastModified = checkedAt
 
-	synced := contentMatch
-	if sub.UpdatedAt != "" && sub.FileMtime != "" && sub.UpdatedAt > sub.FileMtime {
-		synced = false // metadata changed after the file was written → needs regenerate
-	}
-	sub.Synced = &synced
+	h.syncMu.Lock()
+	h.syncCache[sub.Name] = syncCacheEntry{synced: sub.Synced, checkedAt: sub.AggrLastModified}
+	h.syncMu.Unlock()
 }
 
 // aggregatorMatchesLocal fetches /sub/{name} from the aggregator and compares
