@@ -401,6 +401,27 @@ function AppInner() {
               <button className="btn btn-sm" title="Добавить клиента" onClick={() => { if (!currentPanelId) { showToast('⚠️ Сначала выберите панель'); return; } setShowAddClient(true); }}>👤 + клиент</button>
             </div>
           </div>
+          {panels.length > 0 && (
+            <div className="column-tools">
+              <select className="panel-select" value={currentPanelId || ''} onChange={e => setCurrentPanelId(e.target.value)}>
+                {sortedPanels.map(p => {
+                  const cnt = ksCountByPanel[p.id] || 0;
+                  const unreachable = (keySources || []).some(ks => ks.type === 'panel' && ks.panelId === p.id && ks.status === 'panel_unreachable');
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {unreachable ? '○' : '●'} {p.name} · {cnt}
+                    </option>
+                  );
+                })}
+              </select>
+
+              <div className="search-wrap">
+                <span className="search-icon">🔍</span>
+                <input type="text" placeholder="Поиск клиентов и инбаундов…"
+                  value={clientSearch} onChange={e => setClientSearch(e.target.value)} />
+              </div>
+            </div>
+          )}
           <div className="col-body">
             {panels.length === 0 ? (
               <div className="empty-state">
@@ -411,24 +432,6 @@ function AppInner() {
               </div>
             ) : (
               <>
-                <select className="panel-select" value={currentPanelId || ''} onChange={e => setCurrentPanelId(e.target.value)}>
-                  {sortedPanels.map(p => {
-                    const cnt = ksCountByPanel[p.id] || 0;
-                    const unreachable = (keySources || []).some(ks => ks.type === 'panel' && ks.panelId === p.id && ks.status === 'panel_unreachable');
-                    return (
-                      <option key={p.id} value={p.id}>
-                        {unreachable ? '○' : '●'} {p.name} · {cnt}
-                      </option>
-                    );
-                  })}
-                </select>
-
-                <div className="search-wrap">
-                  <span className="search-icon">🔍</span>
-                  <input type="text" placeholder="Поиск клиентов и инбаундов…"
-                    value={clientSearch} onChange={e => setClientSearch(e.target.value)} />
-                </div>
-
                 {loadingClients ? (
                   <div className="loading-state"><div className="spin"></div><p>Загружаем клиенты с {panel?.name}…</p></div>
                 ) : filteredClients.length === 0 ? (

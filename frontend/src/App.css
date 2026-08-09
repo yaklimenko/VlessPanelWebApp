@@ -102,6 +102,10 @@ input, button, select, textarea { font-family: inherit; font-size: inherit; colo
 }
 .column-header h2 { font-size: 14px; font-weight: 600; }
 .column-body { flex: 1; overflow-y: auto; padding: 8px 12px; }
+.column-tools {
+  flex-shrink: 0; padding: 8px 12px 6px; border-bottom: 1px solid var(--border);
+  background: var(--bg); z-index: 2;
+}
 .column-footer {
   padding: 10px 16px; border-top: 1px solid var(--border);
   flex-shrink: 0; background: var(--bg);
