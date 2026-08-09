@@ -18,6 +18,7 @@ function AppInner() {
   const [currentPanelId, setCurrentPanelId] = useState(null);
   const [clients, setClients] = useState([]);
   const [inbounds, setInbounds] = useState([]);
+  const [clientsError, setClientsError] = useState(null);
   const [clientSearch, setClientSearch] = useState('');
   const [loadingClients, setLoadingClients] = useState(false);
   const [showAddPanel, setShowAddPanel] = useState(false);
@@ -67,10 +68,13 @@ function AppInner() {
   // ─── Load clients + inbounds for panel ───
   useEffect(() => {
     if (!currentPanelId) return;
+    setClients([]);
+    setInbounds([]);
+    setClientsError(null);
     setLoadingClients(true);
     Promise.all([api.listClients(currentPanelId), api.listInbounds(currentPanelId)])
       .then(([cl, ib]) => { setClients(cl || []); setInbounds(ib || []); })
-      .catch(err => showToast('⚠️ ' + err.message))
+      .catch(err => { setClientsError(err.message || 'Панель недоступна'); showToast('⚠️ ' + err.message); })
       .finally(() => setLoadingClients(false));
   }, [currentPanelId]);
 
@@ -436,6 +440,12 @@ function AppInner() {
               <>
                 {loadingClients ? (
                   <div className="loading-state"><div className="spin"></div><p>Загружаем клиенты с {panel?.name}…</p></div>
+                ) : clientsError ? (
+                  <div className="empty-state">
+                    <div className="icon">⚠️</div>
+                    <p>Панель недоступна</p>
+                    <p className="hint">{clientsError}</p>
+                  </div>
                 ) : filteredClients.length === 0 ? (
                   <div className="empty-state">
                     <div className="icon">👤</div>
