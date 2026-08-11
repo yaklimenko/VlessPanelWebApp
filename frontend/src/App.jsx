@@ -212,7 +212,6 @@ function AppInner() {
       });
       ksId = res.keySource.id;
       if (!res.deduped) {
-        showToast(`🔑 KeySource создан: ${inbound.remark} · ${client.email}`);
         // Добавить локально, не дёргая панели (полный refresh — по кнопке «Обновить»)
         const panelName = (panels || []).find(p => p.id === currentPanelId)?.name || '';
         const expireDate = client.expiryTime ? new Date(client.expiryTime).toISOString().slice(0, 10) : undefined;
@@ -373,12 +372,10 @@ function AppInner() {
   // ─── Delete KeySource ───
   const handleDeleteKS = async (ks) => {
     try {
-      const res = await api.deleteKeySource(ks.id);
+      await api.deleteKeySource(ks.id);
       setDeleteKS(null);
       setKsDetails(null);
       loadData();
-      const n = res.usedInSubscriptions || 0;
-      showToast(`🗑 KeySource удалён${n > 0 ? ` из ${n} ${n === 1 ? 'подписки' : 'подписок'}` : ''}`);
     } catch (err) { showToast('⚠️ ' + err.message); }
   };
 
