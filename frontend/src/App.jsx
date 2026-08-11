@@ -136,7 +136,6 @@ function AppInner() {
     if (!currentPanelId) return;
     api.createClient(currentPanelId, data)
       .then(() => {
-        showToast('✅ Клиент создан');
         setShowAddClient(false);
         api.listClients(currentPanelId).then(d => setClients(d)).catch(() => {});
       })
@@ -304,7 +303,6 @@ function AppInner() {
     try {
       const res = await api.updateSubscription(subId, { removeKeyId: subKey.id });
       setSubscriptions(prev => prev.map(s => s.id === subId ? res : s));
-      showToast('🗑 Ключ удалён из подписки');
     } catch (err) { showToast('⚠️ ' + err.message); }
   };
 
