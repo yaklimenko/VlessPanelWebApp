@@ -211,14 +211,27 @@ function AppInner() {
         inboundId: inbound.id,
       });
       ksId = res.keySource.id;
-      if (!res.deduped) showToast(`🔑 KeySource создан: ${inbound.remark} · ${client.email}`);
+      if (!res.deduped) {
+        showToast(`🔑 KeySource создан: ${inbound.remark} · ${client.email}`);
+        // Добавить локально, не дёргая панели (полный refresh — по кнопке «Обновить»)
+        const panelName = (panels || []).find(p => p.id === currentPanelId)?.name || '';
+        const expireDate = client.expiryTime ? new Date(client.expiryTime).toISOString().slice(0, 10) : undefined;
+        setKeySources(prev => [...prev, {
+          ...res.keySource,
+          status: 'ok',
+          panelName,
+          inboundRemark: inbound.remark,
+          inboundPort: inbound.port,
+          clientEnabled: client.enable,
+          expireDate,
+          traffic: (client.up != null || client.down != null) ? { up: client.up || 0, down: client.down || 0 } : undefined,
+          usedInSubs: 0,
+        }]);
+      }
     } catch (err) {
       showToast('⚠️ ' + err.message);
       return;
     }
-
-    // refresh key sources list to get statuses
-    api.listKeySources().then(setKeySources).catch(() => {});
 
     if (!activeSub) {
       // no active subscription → propose creating one

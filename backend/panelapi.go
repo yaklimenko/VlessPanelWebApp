@@ -113,8 +113,8 @@ func (api *PanelAPI) ListInbounds(panel Panel) ([]XUIInbound, error) {
 	return inbounds, nil
 }
 
-// ListClientsDirect uses the dedicated /panel/api/clients/list endpoint (3X-UI v3.4.2+)
-func (api *PanelAPI) ListClientsDirect(panel Panel) ([]Client, error) {
+// fetchXUIClients fetches raw clients from /panel/api/clients/list (3X-UI v3.4.2+)
+func (api *PanelAPI) fetchXUIClients(panel Panel) ([]XUIClient, error) {
 	url := api.buildURL(panel, "panel/api/clients/list")
 
 	resp, err := api.doRequest("GET", url, panel.Token, nil)
@@ -138,16 +138,17 @@ func (api *PanelAPI) ListClientsDirect(panel Panel) ([]Client, error) {
 
 	var xuiClients []XUIClient
 	if err := json.Unmarshal(objBytes, &xuiClients); err != nil {
-		log.Printf("ListClientsDirect: failed to unmarshal clients: %v\nObj: %s", err, string(objBytes))
+		log.Printf("fetchXUIClients: failed to unmarshal clients: %v\nObj: %s", err, string(objBytes))
 		return nil, fmt.Errorf("parsing clients: %w", err)
 	}
 
-	// Fetch inbounds to map inbound IDs → remark names
-	inbounds, err := api.ListInbounds(panel)
-	if err != nil {
-		log.Printf("ListClientsDirect: ListInbounds failed, inbound names unavailable: %v", err)
-	}
-	remarkMap := make(map[int]string)
+	return xuiClients, nil
+}
+
+// mapClientsToInbounds converts raw XUI clients into Client, resolving inbound
+// IDs to remark names via the inbounds list.
+func mapClientsToInbounds(xuiClients []XUIClient, inbounds []XUIInbound) []Client {
+	remarkMap := make(map[int]string, len(inbounds))
 	for _, ib := range inbounds {
 		remarkMap[ib.ID] = ib.Remark
 	}
@@ -176,7 +177,66 @@ func (api *PanelAPI) ListClientsDirect(panel Panel) ([]Client, error) {
 		})
 	}
 
-	return clients, nil
+	return clients
+}
+
+// ListClientsDirect uses the dedicated /panel/api/clients/list endpoint (3X-UI v3.4.2+)
+func (api *PanelAPI) ListClientsDirect(panel Panel) ([]Client, error) {
+	xuiClients, err := api.fetchXUIClients(panel)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch inbounds to map inbound IDs → remark names
+	inbounds, err := api.ListInbounds(panel)
+	if err != nil {
+		log.Printf("ListClientsDirect: ListInbounds failed, inbound names unavailable: %v", err)
+	}
+
+	return mapClientsToInbounds(xuiClients, inbounds), nil
+}
+
+// ListClientsAndInbounds fetches clients and inbounds in parallel (one panel
+// snapshot). Falls back to inbounds-based client extraction when the direct
+// clients endpoint is unavailable; inbounds are required for status enrichment.
+func (api *PanelAPI) ListClientsAndInbounds(panel Panel) ([]Client, []XUIInbound, error) {
+	type res struct {
+		kind     string // "clients" | "inbounds"
+		clients  []XUIClient
+		inbounds []XUIInbound
+		err      error
+	}
+	ch := make(chan res, 2)
+	go func() {
+		clients, err := api.fetchXUIClients(panel)
+		ch <- res{kind: "clients", clients: clients, err: err}
+	}()
+	go func() {
+		inbounds, err := api.ListInbounds(panel)
+		ch <- res{kind: "inbounds", inbounds: inbounds, err: err}
+	}()
+
+	var xuiClients []XUIClient
+	var inbounds []XUIInbound
+	var cerr, ierr error
+	for i := 0; i < 2; i++ {
+		r := <-ch
+		if r.kind == "clients" {
+			xuiClients, cerr = r.clients, r.err
+		} else {
+			inbounds, ierr = r.inbounds, r.err
+		}
+	}
+
+	if ierr != nil {
+		return nil, nil, ierr
+	}
+	if cerr != nil {
+		log.Printf("ListClientsAndInbounds: direct clients failed, falling back to inbounds extraction: %v", cerr)
+		return clientsFromInbounds(inbounds), inbounds, nil
+	}
+
+	return mapClientsToInbounds(xuiClients, inbounds), inbounds, nil
 }
 
 // ListClients extracts all clients, trying the direct endpoint first with inbounds fallback
@@ -196,6 +256,11 @@ func (api *PanelAPI) listClientsFromInbounds(panel Panel) ([]Client, error) {
 		return nil, err
 	}
 
+	return clientsFromInbounds(inbounds), nil
+}
+
+// clientsFromInbounds extracts all clients from an already-fetched inbounds list.
+func clientsFromInbounds(inbounds []XUIInbound) []Client {
 	clientMap := make(map[string]*Client)
 
 	for _, inbound := range inbounds {
@@ -252,7 +317,7 @@ func (api *PanelAPI) listClientsFromInbounds(panel Panel) ([]Client, error) {
 		clients = append(clients, *c)
 	}
 
-	return clients, nil
+	return clients
 }
 
 // GetClientLinks fetches the links the panel itself generates for a client

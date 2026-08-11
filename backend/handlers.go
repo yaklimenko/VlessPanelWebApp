@@ -853,6 +853,43 @@ type panelSnapshot struct {
 	err      error
 }
 
+// loadPanelSnapshot fetches one panel's clients+inbounds in parallel.
+func (h *Handlers) loadPanelSnapshot(panel Panel) *panelSnapshot {
+	clients, inbounds, err := h.panelAPI.ListClientsAndInbounds(panel)
+	return &panelSnapshot{clients: clients, inbounds: inbounds, err: err}
+}
+
+// loadSnapshots fetches clients+inbounds for all panels referenced by the
+// given KeySources in parallel (one goroutine per panel). Panels without any
+// KeySource are not touched.
+func (h *Handlers) loadSnapshots(panelMap map[string]Panel, sources []KeySource) map[string]*panelSnapshot {
+	needed := make(map[string]bool)
+	for _, ks := range sources {
+		if ks.Type == "panel" {
+			if _, ok := panelMap[ks.PanelID]; ok {
+				needed[ks.PanelID] = true
+			}
+		}
+	}
+
+	snapshot := make(map[string]*panelSnapshot, len(needed))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for pid := range needed {
+		panel := panelMap[pid]
+		wg.Add(1)
+		go func(p Panel) {
+			defer wg.Done()
+			snap := h.loadPanelSnapshot(p)
+			mu.Lock()
+			snapshot[p.ID] = snap
+			mu.Unlock()
+		}(panel)
+	}
+	wg.Wait()
+	return snapshot
+}
+
 // ListKeySources returns all KeySources with derived statuses, caches, traffic.
 func (h *Handlers) ListKeySources(w http.ResponseWriter, r *http.Request) {
 	sources, err := h.storage.LoadKeySources()
@@ -880,7 +917,7 @@ func (h *Handlers) ListKeySources(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	snapshot := map[string]*panelSnapshot{}
+	snapshot := h.loadSnapshots(panelMap, sources)
 	resp := make([]KeySource, 0, len(sources))
 	for i := range sources {
 		ks := sources[i]
@@ -1253,15 +1290,7 @@ func (h *Handlers) enrichKeySource(ks *KeySource, panelMap map[string]Panel, sna
 
 	snap := snapshot[ks.PanelID]
 	if snap == nil {
-		clients, cerr := h.panelAPI.ListClients(panel)
-		inbounds, ierr := h.panelAPI.ListInbounds(panel)
-		var snapErr error
-		if cerr != nil {
-			snapErr = cerr
-		} else if ierr != nil {
-			snapErr = ierr
-		}
-		snap = &panelSnapshot{clients: clients, inbounds: inbounds, err: snapErr}
+		snap = h.loadPanelSnapshot(panel)
 		snapshot[ks.PanelID] = snap
 	}
 
