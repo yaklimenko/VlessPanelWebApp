@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -116,26 +117,13 @@ func (h *Handlers) DeletePanel(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ListClients(w http.ResponseWriter, r *http.Request) {
 	panelID := chi.URLParam(r, "id")
 
-	panels, err := h.storage.LoadPanels()
+	panel, err := h.storage.GetPanel(panelID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to load panels")
+		respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	var panel *Panel
-	for i, p := range panels {
-		if p.ID == panelID {
-			panel = &panels[i]
-			break
-		}
-	}
-
-	if panel == nil {
-		respondError(w, http.StatusNotFound, "Panel not found")
-		return
-	}
-
-	clients, err := h.panelAPI.ListClients(*panel)
+	clients, err := h.panelAPI.ListClients(panel)
 	if err != nil {
 		log.Printf("Error listing clients for panel %s: %v", panelID, err)
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to list clients: %v", err))
@@ -160,26 +148,13 @@ func (h *Handlers) CreateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	panels, err := h.storage.LoadPanels()
+	panel, err := h.storage.GetPanel(panelID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to load panels")
+		respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	var panel *Panel
-	for i, p := range panels {
-		if p.ID == panelID {
-			panel = &panels[i]
-			break
-		}
-	}
-
-	if panel == nil {
-		respondError(w, http.StatusNotFound, "Panel not found")
-		return
-	}
-
-	if err := h.panelAPI.CreateClient(*panel, req.InboundID, req.Email, req.ExpiryDate); err != nil {
+	if err := h.panelAPI.CreateClient(panel, req.InboundID, req.Email, req.ExpiryDate); err != nil {
 		log.Printf("Error creating client on panel %s: %v", panelID, err)
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create client: %v", err))
 		return
@@ -193,26 +168,13 @@ func (h *Handlers) GetClientKeys(w http.ResponseWriter, r *http.Request) {
 	panelID := chi.URLParam(r, "id")
 	email := chi.URLParam(r, "email")
 
-	panels, err := h.storage.LoadPanels()
+	panel, err := h.storage.GetPanel(panelID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to load panels")
+		respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	var panel *Panel
-	for i, p := range panels {
-		if p.ID == panelID {
-			panel = &panels[i]
-			break
-		}
-	}
-
-	if panel == nil {
-		respondError(w, http.StatusNotFound, "Panel not found")
-		return
-	}
-
-	keys, err := h.panelAPI.GetClientKeys(*panel, email)
+	keys, err := h.panelAPI.GetClientKeys(panel, email)
 	if err != nil {
 		log.Printf("Error getting keys for client %s on panel %s: %v", email, panelID, err)
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get keys: %v", err))
@@ -226,26 +188,13 @@ func (h *Handlers) GetClientKeys(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ListInbounds(w http.ResponseWriter, r *http.Request) {
 	panelID := chi.URLParam(r, "id")
 
-	panels, err := h.storage.LoadPanels()
+	panel, err := h.storage.GetPanel(panelID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to load panels")
+		respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	var panel *Panel
-	for i, p := range panels {
-		if p.ID == panelID {
-			panel = &panels[i]
-			break
-		}
-	}
-
-	if panel == nil {
-		respondError(w, http.StatusNotFound, "Panel not found")
-		return
-	}
-
-	inbounds, err := h.panelAPI.ListInbounds(*panel)
+	inbounds, err := h.panelAPI.ListInbounds(panel)
 	if err != nil {
 		log.Printf("Error listing inbounds for panel %s: %v", panelID, err)
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to list inbounds: %v", err))
@@ -293,26 +242,13 @@ func (h *Handlers) AttachInbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	panels, err := h.storage.LoadPanels()
+	panel, err := h.storage.GetPanel(panelID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to load panels")
+		respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	var panel *Panel
-	for i, p := range panels {
-		if p.ID == panelID {
-			panel = &panels[i]
-			break
-		}
-	}
-
-	if panel == nil {
-		respondError(w, http.StatusNotFound, "Panel not found")
-		return
-	}
-
-	if err := h.panelAPI.AttachClient(*panel, email, req.InboundID); err != nil {
+	if err := h.panelAPI.AttachClient(panel, email, req.InboundID); err != nil {
 		log.Printf("Error attaching client %s to inbound %d on panel %s: %v", email, req.InboundID, panelID, err)
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to attach inbound: %v", err))
 		return
@@ -339,26 +275,13 @@ func (h *Handlers) DetachInbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	panels, err := h.storage.LoadPanels()
+	panel, err := h.storage.GetPanel(panelID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to load panels")
+		respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	var panel *Panel
-	for i, p := range panels {
-		if p.ID == panelID {
-			panel = &panels[i]
-			break
-		}
-	}
-
-	if panel == nil {
-		respondError(w, http.StatusNotFound, "Panel not found")
-		return
-	}
-
-	if err := h.panelAPI.DetachClient(*panel, email, req.InboundID); err != nil {
+	if err := h.panelAPI.DetachClient(panel, email, req.InboundID); err != nil {
 		log.Printf("Error detaching client %s from inbound %d on panel %s: %v", email, req.InboundID, panelID, err)
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to detach inbound: %v", err))
 		return
@@ -378,22 +301,9 @@ func (h *Handlers) UpdateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	panels, err := h.storage.LoadPanels()
+	panel, err := h.storage.GetPanel(panelID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to load panels")
-		return
-	}
-
-	var panel *Panel
-	for i, p := range panels {
-		if p.ID == panelID {
-			panel = &panels[i]
-			break
-		}
-	}
-
-	if panel == nil {
-		respondError(w, http.StatusNotFound, "Panel not found")
+		respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
@@ -407,7 +317,7 @@ func (h *Handlers) UpdateClient(w http.ResponseWriter, r *http.Request) {
 		expiryTime = t.Unix() * 1000
 	}
 
-	if err := h.panelAPI.UpdateClient(*panel, email, expiryTime); err != nil {
+	if err := h.panelAPI.UpdateClient(panel, email, expiryTime); err != nil {
 		log.Printf("Error updating client %s on panel %s: %v", email, panelID, err)
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to update client: %v", err))
 		return
@@ -1104,31 +1014,19 @@ func (h *Handlers) GetKeySourceKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	panels, err := h.storage.LoadPanels()
+	panel, err := h.storage.GetPanel(ks.PanelID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to load panels")
-		return
-	}
-	var panel *Panel
-	for i := range panels {
-		if panels[i].ID == ks.PanelID {
-			panel = &panels[i]
-			break
-		}
-	}
-	if panel == nil {
 		respondError(w, http.StatusNotFound, "панель KeySource не найдена (удалена?)")
 		return
 	}
 
-	key, err := h.panelAPI.GetClientKeyForInbound(*panel, ks.ClientEmail, ks.InboundID)
+	key, err := h.panelAPI.GetClientKeyForInbound(panel, ks.ClientEmail, ks.InboundID)
 	if err != nil {
 		log.Printf("GetKeySourceKey %s: %v", id, err)
-		msg := err.Error()
-		if strings.Contains(msg, "Client.Timeout") || strings.Contains(msg, "context deadline") || strings.Contains(msg, "connection refused") || strings.Contains(msg, "no such host") || strings.Contains(msg, "EOF") {
+		if errors.Is(err, ErrPanelUnreachable) {
 			respondError(w, http.StatusBadGateway, "панель недоступна (таймаут 10 с)")
 		} else {
-			respondError(w, http.StatusNotFound, msg)
+			respondError(w, http.StatusNotFound, err.Error())
 		}
 		return
 	}
@@ -1156,19 +1054,12 @@ func (h *Handlers) TestKeySource(w http.ResponseWriter, r *http.Request) {
 		link = ks.VlessLink
 	} else {
 		// Fetch fresh key so the test reflects reality.
-		panels, _ := h.storage.LoadPanels()
-		var panel *Panel
-		for i := range panels {
-			if panels[i].ID == ks.PanelID {
-				panel = &panels[i]
-				break
-			}
-		}
-		if panel == nil {
+		panel, err := h.storage.GetPanel(ks.PanelID)
+		if err != nil {
 			respondError(w, http.StatusNotFound, "панель KeySource не найдена (удалена?)")
 			return
 		}
-		key, err := h.panelAPI.GetClientKeyForInbound(*panel, ks.ClientEmail, ks.InboundID)
+		key, err := h.panelAPI.GetClientKeyForInbound(panel, ks.ClientEmail, ks.InboundID)
 		if err != nil {
 			lastTest := &KeySourceTest{Status: "fail", At: nowStr(), Error: err.Error()}
 			ks.LastTest = lastTest
@@ -1243,20 +1134,13 @@ func (h *Handlers) GetKeySourceTraffic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	panels, _ := h.storage.LoadPanels()
-	var panel *Panel
-	for i := range panels {
-		if panels[i].ID == ks.PanelID {
-			panel = &panels[i]
-			break
-		}
-	}
-	if panel == nil {
+	panel, err := h.storage.GetPanel(ks.PanelID)
+	if err != nil {
 		respondError(w, http.StatusNotFound, "панель KeySource не найдена (удалена?)")
 		return
 	}
 
-	client, err := h.panelAPI.GetClientStats(*panel, ks.ClientEmail)
+	client, err := h.panelAPI.GetClientStats(panel, ks.ClientEmail)
 	if err != nil {
 		respondError(w, http.StatusNotFound, err.Error())
 		return
@@ -1392,16 +1276,16 @@ func (h *Handlers) resolveKeySources(ids []string, report *GenerationReport, inc
 		ms := int(time.Since(start).Milliseconds())
 
 		if err != nil {
-			msg := err.Error()
-			if strings.Contains(msg, "клиент") && strings.Contains(msg, "не найден") {
-				report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: "клиент не найден на панели — пропущен"})
-			} else if strings.Contains(msg, "инбаунд") && strings.Contains(msg, "не найден") {
-				report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: "инбаунд не найден на панели — пропущен"})
-			} else if strings.Contains(msg, "Client.Timeout") || strings.Contains(msg, "context deadline") || strings.Contains(msg, "connection refused") || strings.Contains(msg, "no such host") || strings.Contains(msg, "EOF") || strings.Contains(msg, "tls") {
-				report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: "панель недоступна (таймаут 10 с)"})
-			} else {
-				report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: msg})
+			why := err.Error()
+			switch {
+			case errors.Is(err, ErrClientNotFound):
+				why = "клиент не найден на панели — пропущен"
+			case errors.Is(err, ErrInboundNotFound):
+				why = "инбаунд не найден на панели — пропущен"
+			case errors.Is(err, ErrPanelUnreachable):
+				why = "панель недоступна (таймаут 10 с)"
 			}
+			report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: why})
 			continue
 		}
 
@@ -1456,13 +1340,13 @@ func (h *Handlers) regenerateKeys(keys []SubKey, report *GenerationReport) ([]Su
 		key, err := h.panelAPI.GetClientKeyForInbound(panel, ks.ClientEmail, ks.InboundID)
 		ms := int(time.Since(start).Milliseconds())
 		if err != nil {
-			msg := err.Error()
-			why := msg
-			if strings.Contains(msg, "клиент") && strings.Contains(msg, "не найден") {
+			why := err.Error()
+			switch {
+			case errors.Is(err, ErrClientNotFound):
 				why = "клиент не найден на панели — не включён"
-			} else if strings.Contains(msg, "инбаунд") && strings.Contains(msg, "не найден") {
+			case errors.Is(err, ErrInboundNotFound):
 				why = "инбаунд не найден на панели — не включён"
-			} else if strings.Contains(msg, "Client.Timeout") || strings.Contains(msg, "context deadline") || strings.Contains(msg, "connection refused") || strings.Contains(msg, "no such host") || strings.Contains(msg, "EOF") || strings.Contains(msg, "tls") {
+			case errors.Is(err, ErrPanelUnreachable):
 				why = "панель недоступна (таймаут 10 с)"
 			}
 			report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: why})

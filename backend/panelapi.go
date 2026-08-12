@@ -42,7 +42,10 @@ func (api *PanelAPI) buildURL(panel Panel, path string) string {
 	return fmt.Sprintf("%s/%s", base, strings.TrimLeft(path, "/"))
 }
 
-// doRequest performs an HTTP request to a 3X-UI panel
+// doRequest performs an HTTP request to a 3X-UI panel.
+// Network-level failures (timeout, connection refused, DNS, TLS, EOF) are
+// wrapped as ErrPanelUnreachable so callers can dispatch via errors.Is
+// instead of strings.Contains-парсинга.
 func (api *PanelAPI) doRequest(method, url, token string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -54,7 +57,11 @@ func (api *PanelAPI) doRequest(method, url, token string, body io.Reader) (*http
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	return api.client.Do(req)
+	resp, err := api.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrPanelUnreachable, err)
+	}
+	return resp, nil
 }
 
 // parseResponse parses a 3X-UI API response
@@ -707,7 +714,7 @@ func (api *PanelAPI) GetClientKeyForInbound(panel Panel, email string, inboundID
 		}
 	}
 	if !foundInbound {
-		return VLESSKey{}, fmt.Errorf("инбаунд %d не найден на панели", inboundID)
+		return VLESSKey{}, fmt.Errorf("%w: inbound %d", ErrInboundNotFound, inboundID)
 	}
 
 	keys, err := api.GetClientKeys(panel, email)
@@ -721,7 +728,7 @@ func (api *PanelAPI) GetClientKeyForInbound(panel Panel, email string, inboundID
 		}
 	}
 
-	return VLESSKey{}, fmt.Errorf("ключ для клиента %s на инбаунде %d не найден", email, inboundID)
+	return VLESSKey{}, fmt.Errorf("%w: client %s on inbound %d", ErrClientNotFound, email, inboundID)
 }
 
 // GetClientStats fetches traffic/expiry stats for a client from the panel's
@@ -737,7 +744,7 @@ func (api *PanelAPI) GetClientStats(panel Panel, email string) (*Client, error) 
 			return &c, nil
 		}
 	}
-	return nil, fmt.Errorf("клиент %s не найден на панели", email)
+	return nil, fmt.Errorf("%w: %s", ErrClientNotFound, email)
 }
 
 // extractHost extracts the host from a panel URL
