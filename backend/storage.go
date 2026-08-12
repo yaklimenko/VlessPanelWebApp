@@ -78,6 +78,21 @@ func NewStorage(panelsPath, aggregatorDir, dataDir string) *Storage {
 
 // --- Panels ---
 
+// GetPanel returns a single panel by ID. Returns ErrPanelNotFound when absent.
+// Loads the whole file under RLock (panels list is small and unindexed).
+func (s *Storage) GetPanel(id string) (Panel, error) {
+	panels, err := s.LoadPanels()
+	if err != nil {
+		return Panel{}, err
+	}
+	for i := range panels {
+		if panels[i].ID == id {
+			return panels[i], nil
+		}
+	}
+	return Panel{}, fmt.Errorf("%w: %s", ErrPanelNotFound, id)
+}
+
 // LoadPanels reads all panels from panels.json
 func (s *Storage) LoadPanels() ([]Panel, error) {
 	s.mu.RLock()
@@ -171,7 +186,7 @@ func (s *Storage) DeletePanel(id string) error {
 	}
 
 	if !found {
-		return fmt.Errorf("panel %s not found", id)
+		return fmt.Errorf("%w: %s", ErrPanelNotFound, id)
 	}
 
 	return s.SavePanels(panels)
@@ -227,7 +242,7 @@ func (s *Storage) GetKeySource(id string) (*KeySource, error) {
 			return &ks, nil
 		}
 	}
-	return nil, fmt.Errorf("key source %s not found", id)
+	return nil, fmt.Errorf("%w: %s", ErrKeySourceNotFound, id)
 }
 
 // UpdateKeySource replaces a KeySource by ID.
@@ -245,7 +260,7 @@ func (s *Storage) UpdateKeySource(updated KeySource) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("key source %s not found", updated.ID)
+		return fmt.Errorf("%w: %s", ErrKeySourceNotFound, updated.ID)
 	}
 	return s.SaveKeySources(sources)
 }
@@ -265,7 +280,7 @@ func (s *Storage) DeleteKeySource(id string) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("key source %s not found", id)
+		return fmt.Errorf("%w: %s", ErrKeySourceNotFound, id)
 	}
 	return s.SaveKeySources(sources)
 }
@@ -633,7 +648,7 @@ func (s *Storage) GetSubscription(name string) (*Subscription, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("subscription %s not found", name)
+	return nil, fmt.Errorf("%w: %s", ErrSubscriptionNotFound, name)
 }
 
 // GetSubscriptionRaw returns the raw content of a subscription file
@@ -645,7 +660,7 @@ func (s *Storage) GetSubscriptionRaw(name string) (string, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("subscription %s not found", name)
+			return "", fmt.Errorf("%w: %s", ErrSubscriptionNotFound, name)
 		}
 		return "", fmt.Errorf("reading subscription file: %w", err)
 	}
