@@ -531,7 +531,16 @@ func (api *PanelAPI) CreateClient(panel Panel, inboundID int, email string, expi
 	return nil
 }
 
-// AttachClient attaches an existing client to an additional inbound
+// AttachClient attaches an existing client to an additional inbound.
+//
+// 3X-UI's attach API accepts only inboundIds and derives the client flow from
+// the existing flow_override (EffectiveFlow — the first non-empty override
+// among already attached inbounds). If the client was created on a
+// non-flow-eligible inbound (e.g. XHTTP without vlessenc), flow_override is
+// empty and the newly attached REALITY/TLS inbound gets NO flow — which breaks
+// REALITY keys. So after a successful attach we push a targeted update with
+// flow=xtls-rprx-vision: 3X-UI re-applies clientWithInboundFlow per inbound,
+// keeping the flow on flow-eligible inbounds and stripping it on others.
 func (api *PanelAPI) AttachClient(panel Panel, email string, inboundID int) error {
 	_url := api.buildURL(panel, fmt.Sprintf("panel/api/clients/%s/attach", email))
 
@@ -547,6 +556,56 @@ func (api *PanelAPI) AttachClient(panel Panel, email string, inboundID int) erro
 	resp, err := api.doRequest("POST", _url, panel.Token, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("attaching client to inbound: %w", err)
+	}
+
+	xuiResp, err := api.parseResponse(resp)
+	if err != nil {
+		return err
+	}
+
+	if !xuiResp.Success {
+		return fmt.Errorf("3X-UI error: %s", xuiResp.Msg)
+	}
+
+	// Push the XTLS Vision flow onto the just-attached inbound (no-op for
+	// non-flow-eligible inbounds). Best-effort: if it fails, the attach itself
+	// already succeeded, but we surface the error so callers know flow is off.
+	if err := api.SetClientFlow(panel, email, inboundID); err != nil {
+		return fmt.Errorf("client attached, but setting flow on inbound %d: %w", inboundID, err)
+	}
+
+	return nil
+}
+
+// SetClientFlow sets flow=xtls-rprx-vision on a specific inbound of a client
+// via a targeted 3X-UI update (?inboundIds=<id>). Current expiryTime is passed
+// through so the partial update doesn't wipe it (3X-UI replaces the client in
+// the inbound settings wholesale).
+func (api *PanelAPI) SetClientFlow(panel Panel, email string, inboundID int) error {
+	stats, err := api.GetClientStats(panel, email)
+	if err != nil {
+		return fmt.Errorf("fetching client before flow update: %w", err)
+	}
+
+	_url := api.buildURL(panel, fmt.Sprintf("panel/api/clients/update/%s?inboundIds=%d", email, inboundID))
+
+	payload := map[string]interface{}{
+		"email":  email,
+		"enable": true,
+		"flow":   "xtls-rprx-vision",
+	}
+	if stats.ExpiryTime > 0 {
+		payload["expiryTime"] = stats.ExpiryTime
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshaling flow payload: %w", err)
+	}
+
+	resp, err := api.doRequest("POST", _url, panel.Token, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("setting flow on inbound: %w", err)
 	}
 
 	xuiResp, err := api.parseResponse(resp)
