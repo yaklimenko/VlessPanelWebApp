@@ -4,7 +4,7 @@ import {
   ToastProvider, useToast,
   Header, ClientCard, KSChip,
   NewSubModal, KSDetailsModal, DeleteSubModal, DeleteKSModal, ReportModal,
-  AddPanelModal, AddClientModal, EditClientModal,
+  AddPanelModal, AddClientModal, AddManualKSModal, EditClientModal,
   fmtDate, fmtShortDate, fmtDateTime,
 } from './components';
 
@@ -23,6 +23,7 @@ function AppInner() {
   const [loadingClients, setLoadingClients] = useState(false);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [showAddClient, setShowAddClient] = useState(false);
+  const [showAddManualKS, setShowAddManualKS] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
 
   // KeySources
@@ -245,6 +246,42 @@ function AppInner() {
     await addKeySourceToSub(activeSub.id, ksId);
   };
 
+  // ─── Manual KeySource (raw vless link) ───
+  const handleAddManualKS = async ({ link, label }) => {
+    let ksId;
+    try {
+      const res = await api.createKeySource({ type: 'manual', vlessLink: link, label });
+      ksId = res.keySource.id;
+      if (!res.deduped) {
+        const ks = res.keySource;
+        setKeySources(prev => [...prev, {
+          ...ks,
+          status: 'ok',
+          keyAvailable: !!ks.vlessLink,
+          cachedKey: ks.vlessLink ? { link: ks.vlessLink, fetchedAt: new Date().toISOString() } : undefined,
+          usedInSubs: 0,
+        }]);
+      } else {
+        showToast('⚠️ Такой ключ уже есть в источниках', 'warn');
+      }
+    } catch (err) {
+      showToast('⚠️ ' + err.message);
+      return;
+    }
+
+    if (!activeSub) {
+      setPendingKS(ksId);
+      setShowNewSub(true);
+      showToast('⚠️ Сначала создайте подписку', 'warn');
+      return;
+    }
+    if (activeSubKeys.current.has(ksId)) {
+      showToast('⚠️ Уже добавлено в «' + activeSub.name + '»', 'warn');
+      return;
+    }
+    await addKeySourceToSub(activeSub.id, ksId);
+  };
+
   const addKeySourceToSub = async (subId, ksId) => {
     try {
       await api.updateSubscription(subId, { addKeySourceIds: [ksId] });
@@ -450,6 +487,7 @@ function AppInner() {
                 {(keySources || []).length} {(keySources || []).length === 1 ? 'источник' : 'источников'}
               </span>
               <button className="btn btn-sm" title="Добавить клиента" onClick={() => { if (!currentPanelId) { showToast('⚠️ Сначала выберите панель'); return; } setShowAddClient(true); }}>👤 + клиент</button>
+              <button className="btn btn-sm" title="Добавить свой vless-ключ вручную" onClick={() => setShowAddManualKS(true)}>🔗 + manual</button>
             </div>
           </div>
           {panels.length > 0 && (
@@ -589,6 +627,12 @@ function AppInner() {
       {/* ─── Modals ─── */}
       {showAddPanel && <AddPanelModal onClose={() => setShowAddPanel(false)} onSubmit={handleAddPanel} />}
       {showAddClient && <AddClientModal inbounds={inbounds} onClose={() => setShowAddClient(false)} onSubmit={handleCreateClient} />}
+      {showAddManualKS && (
+        <AddManualKSModal
+          onClose={() => setShowAddManualKS(false)}
+          onSubmit={async (data) => { setShowAddManualKS(false); await handleAddManualKS(data); }}
+        />
+      )}
       {editingClient && (
         <EditClientModal
           client={editingClient}
