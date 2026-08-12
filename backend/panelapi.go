@@ -650,14 +650,20 @@ func (api *PanelAPI) DetachClient(panel Panel, email string, inboundID int) erro
 	return nil
 }
 
-// UpdateClient updates client fields (expiryTime, etc.) on all attached inbounds
+// UpdateClient updates client fields (expiryTime, etc.) on all attached inbounds.
+// flow=xtls-rprx-vision is always sent: 3X-UI's Update replaces the client in
+// each inbound's settings, so omitting flow would silently strip it (an empty
+// flow survives clientWithInboundFlow on flow-eligible inbounds).
 func (api *PanelAPI) UpdateClient(panel Panel, email string, expiryTime int64) error {
 	_url := api.buildURL(panel, fmt.Sprintf("panel/api/clients/update/%s", email))
 
 	payload := map[string]interface{}{
-		"email":      email,
-		"expiryTime": expiryTime,
-		"enable":     true,
+		"email":  email,
+		"enable": true,
+		"flow":   "xtls-rprx-vision",
+	}
+	if expiryTime > 0 {
+		payload["expiryTime"] = expiryTime
 	}
 
 	body, err := json.Marshal(payload)
