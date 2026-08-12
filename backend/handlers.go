@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -1709,12 +1708,3 @@ func tailString(s string, n int) string {
 	}
 	return "…" + s[len(s)-n:]
 }
-
-// sanitizeFilename ensures a safe filename
-func sanitizeFilename(name string) string {
-	reg := regexp.MustCompile(`[^a-zA-Z0-9_-]`)
-	return reg.ReplaceAllString(name, "_")
-}
-
-// ensure interfaces
-var _ http.Handler = chi.NewRouter()
