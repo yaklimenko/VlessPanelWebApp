@@ -1081,10 +1081,10 @@ func (h *Handlers) DeleteKeySource(w http.ResponseWriter, r *http.Request) {
 		label = id
 	}
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"status":               "deleted",
-		"label":                label,
-		"usedInSubscriptions":  len(affected),
-		"subscriptions":        affected,
+		"status":              "deleted",
+		"label":               label,
+		"usedInSubscriptions": len(affected),
+		"subscriptions":       affected,
 	})
 }
 

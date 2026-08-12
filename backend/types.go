@@ -72,17 +72,17 @@ type SubKey struct {
 // KeySource is a source of a VLESS key: either a client@panel + inbound
 // (type=panel, key fetched live from 3X-UI) or a raw vless link (type=manual).
 type KeySource struct {
-	ID          string           `json:"id"`
-	Type        string           `json:"type"` // panel | manual
-	PanelID     string           `json:"panelId,omitempty"`
-	ClientEmail string           `json:"clientEmail,omitempty"`
-	InboundID   int              `json:"inboundId,omitempty"`
-	VlessLink   string           `json:"vlessLink,omitempty"`
-	Label       string           `json:"label,omitempty"`
-	CachedKey   *CachedKey       `json:"cachedKey,omitempty"`
-	LastTest    *KeySourceTest   `json:"lastTest,omitempty"`
-	CreatedAt   string           `json:"createdAt"`
-	UpdatedAt   string           `json:"updatedAt"`
+	ID          string         `json:"id"`
+	Type        string         `json:"type"` // panel | manual
+	PanelID     string         `json:"panelId,omitempty"`
+	ClientEmail string         `json:"clientEmail,omitempty"`
+	InboundID   int            `json:"inboundId,omitempty"`
+	VlessLink   string         `json:"vlessLink,omitempty"`
+	Label       string         `json:"label,omitempty"`
+	CachedKey   *CachedKey     `json:"cachedKey,omitempty"`
+	LastTest    *KeySourceTest `json:"lastTest,omitempty"`
+	CreatedAt   string         `json:"createdAt"`
+	UpdatedAt   string         `json:"updatedAt"`
 
 	// Derived fields (filled by handlers at read time)
 	Status        string            `json:"status,omitempty"` // ok | expired | missing | panel_unreachable
@@ -167,8 +167,8 @@ type SyncCheckResult struct {
 	Name             string `json:"name"`
 	AggrLastModified string `json:"aggrLastModified,omitempty"`
 	LocalMtime       string `json:"localMtime,omitempty"`
-	Synced            *bool  `json:"synced,omitempty"`
-	Error             string `json:"error,omitempty"`
+	Synced           *bool  `json:"synced,omitempty"`
+	Error            string `json:"error,omitempty"`
 }
 
 // CreatePanelRequest is the request body for adding a panel
