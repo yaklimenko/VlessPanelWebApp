@@ -277,7 +277,7 @@ function AppInner() {
 
   // ─── Generate / regenerate subscription ───
   const handleGenerate = (sub) => {
-    if (!sub || sub.keys.length === 0 || generating) return;
+    if (!sub || (sub.keys || []).length === 0 || generating) return;
     setGenerating(true);
     api.updateSubscription(sub.id, { regenerate: true })
       .then(res => {
@@ -540,7 +540,7 @@ function AppInner() {
               <select className="sub-select" value={activeSubId || ''} onChange={e => setActiveSubId(e.target.value)}>
                 {sortedSubs.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.name}{s.status === 'active' && s.synced === false ? ' ⚠' : ''} · {s.keys.length}
+                    {s.name}{s.status === 'active' && s.synced === false ? ' ⚠' : ''} · {(s.keys || []).length}
                   </option>
                 ))}
               </select>
@@ -697,7 +697,7 @@ function SubscriptionDetail({
           <span className="sub-updated">изменена: {fmtDateTime(sub.updatedAt)}</span>
         </div>
         <div className="sub-detail-sub">
-          🔑 {hasKeys ? sub.keys.length : 0} {sub.keys.length === 1 ? 'ключ' : (sub.keys.length < 5 ? 'ключа' : 'ключей')} · порядок = порядок добавления
+          🔑 {hasKeys ? sub.keys.length : 0} {(sub.keys || []).length === 1 ? 'ключ' : ((sub.keys || []).length < 5 ? 'ключа' : 'ключей')} · порядок = порядок добавления
         </div>
         <div className="sub-actions">
           <button className="btn btn-success" onClick={onGenerate} disabled={!hasKeys || generating}>

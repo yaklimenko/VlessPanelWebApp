@@ -319,6 +319,7 @@ func (s *Storage) LoadSubscriptionsMeta() ([]Subscription, error) {
 	if err := json.Unmarshal(data, &subs); err != nil {
 		return nil, fmt.Errorf("parsing subscriptions meta: %w", err)
 	}
+	normalizeSubKeys(subs)
 	return subs, nil
 }
 
@@ -593,6 +594,15 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 	return subs, nil
 }
 
+// normalizeSubKeys ensures Keys is never nil so JSON serializes as [] not null.
+func normalizeSubKeys(subs []Subscription) {
+	for i := range subs {
+		if subs[i].Keys == nil {
+			subs[i].Keys = []SubKey{}
+		}
+	}
+}
+
 // loadSubsMetaLocked reads subscriptions.json (caller must hold at least RLock).
 func (s *Storage) loadSubsMetaLocked() ([]Subscription, error) {
 	data, err := os.ReadFile(s.subsMetaPath)
@@ -606,6 +616,7 @@ func (s *Storage) loadSubsMetaLocked() ([]Subscription, error) {
 	if err := json.Unmarshal(data, &subs); err != nil {
 		return nil, fmt.Errorf("parsing subscriptions meta: %w", err)
 	}
+	normalizeSubKeys(subs)
 	return subs, nil
 }
 

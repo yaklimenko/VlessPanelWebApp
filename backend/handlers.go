@@ -466,7 +466,8 @@ func (h *Handlers) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve keys: from keySourceIds (new mode) or legacy keys array.
 	// Manual sources are included always (per spec: «manual — включается всегда»).
-	var keys []SubKey
+	// Always initialize non-nil so JSON serializes as [] (not null) for drafts.
+	keys := []SubKey{}
 	if len(req.KeySourceIDs) > 0 {
 		var err error
 		keys, err = h.resolveKeySources(req.KeySourceIDs, report, true)
