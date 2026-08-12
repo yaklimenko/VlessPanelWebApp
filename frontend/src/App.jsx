@@ -357,11 +357,6 @@ function AppInner() {
     } catch (err) { showToast('⚠️ ' + err.message); }
   };
 
-  const copySubLink = async (sub) => {
-    const ok = await copyToClipboard('https://example.com/sub/' + sub.name);
-    showToast(ok ? `📋 Ссылка скопирована: /sub/${sub.name}` : '⚠️ Не удалось скопировать', ok ? 'ok' : 'err');
-  };
-
   // ─── Per-keySource test ───
   const handleTestKS = async (ks) => {
     if (testingKs) return;
@@ -487,7 +482,6 @@ function AppInner() {
                 {(keySources || []).length} {(keySources || []).length === 1 ? 'источник' : 'источников'}
               </span>
               <button className="btn btn-sm" title="Добавить клиента" onClick={() => { if (!currentPanelId) { showToast('⚠️ Сначала выберите панель'); return; } setShowAddClient(true); }}>👤 + клиент</button>
-              <button className="btn btn-sm" title="Добавить свой vless-ключ вручную" onClick={() => setShowAddManualKS(true)}>🔗 + manual</button>
             </div>
           </div>
           {panels.length > 0 && (
@@ -604,8 +598,12 @@ function AppInner() {
                 testableCount={testableCount}
                 onGenerate={() => handleGenerate(activeSub)}
                 onTestSub={() => handleTestSub(activeSub)}
-                onCopyLink={() => copySubLink(activeSub)}
                 onDelete={() => setDeleteSub(activeSub)}
+                onAddManual={() => setShowAddManualKS(true)}
+                onCopyValue={async (text, label) => {
+                  const ok = await copyToClipboard(text);
+                  showToast(ok ? `📋 ${label} скопировано: ${text}` : '⚠️ Не удалось скопировать', ok ? 'ok' : 'err');
+                }}
                 onCopyKey={copyKSKey}
                 onRemoveKey={(subKey) => handleRemoveKey(activeSub.id, subKey)}
                 onTestKS={handleTestKS}
@@ -711,8 +709,9 @@ function AppInner() {
 // ─── Subscription detail panel ───
 function SubscriptionDetail({
   sub, keySourceById, testingKs, generating, testingSub, testResults, testableCount,
-  onGenerate, onTestSub, onCopyLink, onDelete,
+  onGenerate, onTestSub, onDelete,
   onCopyKey, onCopyKeyFromChip, onRemoveKey, onTestKS, onOpenKS, onRefresh,
+  onAddManual, onCopyValue,
 }) {
   const statusBadge = sub.status === 'active'
     ? <span className="badge ok">● включен</span>
@@ -750,7 +749,7 @@ function SubscriptionDetail({
           <button className="btn" onClick={onTestSub} disabled={!testableCount || testingSub} title={testingSub ? 'Тест идёт…' : 'Тест подписки'}>
             {testingSub ? <span className="spin small"></span> : '🧪'} Тест подписки
           </button>
-          <button className="btn btn-sm" onClick={onCopyLink} disabled={sub.status !== 'active'} title="Скопировать ссылку подписки">⧉ ссылка</button>
+          <button className="btn btn-sm" onClick={onAddManual} title="Добавить свой vless-ключ вручную"><span className="ks-dot manual" style={{ display: 'inline-block', marginRight: 6, verticalAlign: 'middle' }}></span>+ manual</button>
           <button className="btn btn-sm" onClick={onRefresh} title="Обновить статусы">🔄</button>
           <button className="btn btn-sm btn-danger" onClick={onDelete} title="Удалить подписку">🗑</button>
         </div>
@@ -795,8 +794,8 @@ function SubscriptionDetail({
           {sub.status === 'active' ? (
             <>
               <div className="row">
-                <span>Файл:</span><code>configs-{sub.name}.txt</code>
-                <span>·</span><span>Ссылка:</span><code>https://example.com/sub/{sub.name}</code>
+                <span>Файл:</span><code className="copyable" title="Клик — скопировать" onClick={() => onCopyValue(`configs-${sub.name}.txt`, 'Имя файла')}>configs-{sub.name}.txt</code>
+                <span>·</span><span>Ссылка:</span><code className="copyable" title="Клик — скопировать" onClick={() => onCopyValue(`https://example.com/sub/${sub.name}`, 'Ссылка подписки')}>https://example.com/sub/{sub.name}</code>
               </div>
               <div className="row">
                 <span>Локально (mtime):</span><code>{fmtDateTime(sub.fileMtime) || '—'}</code>

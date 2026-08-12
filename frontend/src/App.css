@@ -519,6 +519,8 @@ input, button, select, textarea { font-family: inherit; font-size: inherit; colo
 }
 .file-info .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .file-info code { font-family: var(--mono, monospace); font-size: 11.5px; color: var(--text); background: var(--surface); border: 1px solid var(--border); padding: 1px 7px; border-radius: 4px; }
+.file-info code.copyable { cursor: pointer; transition: border-color .15s, color .15s; }
+.file-info code.copyable:hover { border-color: var(--accent, #58a6ff); color: var(--accent, #58a6ff); }
 .file-info .sync-warn { color: #d29922; font-weight: 600; }
 .file-info .sync-ok { color: var(--success); font-weight: 600; }
 
