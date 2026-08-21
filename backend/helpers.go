@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/url"
 	"time"
+
+	"vlesspanel/model"
 )
 
-// ksLabelFor builds a human-readable label for a KeySource.
-func ksLabelFor(ks *KeySource, panelMap map[string]Panel) string {
+// ksLabelFor builds a human-readable label for a model.KeySource.
+func ksLabelFor(ks *model.KeySource, panelMap map[string]model.Panel) string {
 	if ks.Label != "" {
 		return ks.Label
 	}
@@ -21,7 +23,7 @@ func ksLabelFor(ks *KeySource, panelMap map[string]Panel) string {
 	return fmt.Sprintf("%s · %s", p.Name, ks.ClientEmail)
 }
 
-func keySourceInKeys(keys []SubKey, ksID string) bool {
+func keySourceInKeys(keys []model.SubKey, ksID string) bool {
 	for _, k := range keys {
 		if k.KeySourceID != nil && *k.KeySourceID == ksID {
 			return true
@@ -30,7 +32,7 @@ func keySourceInKeys(keys []SubKey, ksID string) bool {
 	return false
 }
 
-func countKind(items []GenerationReportItem, kind string) int {
+func countKind(items []model.GenerationReportItem, kind string) int {
 	n := 0
 	for _, it := range items {
 		if it.Kind == kind {

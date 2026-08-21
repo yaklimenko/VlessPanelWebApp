@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"vlesspanel/dto"
+	"vlesspanel/model"
 )
 
 // --- fakes ---
@@ -13,15 +16,15 @@ import (
 // переопределённые методы паникуют при вызове).
 type fakeRepo struct {
 	Repository
-	tokens []APIToken
+	tokens []model.APIToken
 }
 
-func (f *fakeRepo) AddToken(tok APIToken) error {
+func (f *fakeRepo) AddToken(tok model.APIToken) error {
 	f.tokens = append(f.tokens, tok)
 	return nil
 }
 
-func (f *fakeRepo) LoadTokens() ([]APIToken, error) {
+func (f *fakeRepo) LoadTokens() ([]model.APIToken, error) {
 	return f.tokens, nil
 }
 
@@ -40,7 +43,7 @@ func TestTokenServiceCreate(t *testing.T) {
 	auth := NewTokenAuth("admin")
 	svc := NewTokenService(repo, auth)
 
-	resp, err := svc.Create(CreateTokenRequest{Label: "  bot  "})
+	resp, err := svc.Create(dto.CreateTokenRequest{Label: "  bot  "})
 	if err != nil {
 		t.Fatal(err)
 	}

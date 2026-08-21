@@ -1,6 +1,11 @@
 package main
 
-import "strings"
+import (
+	"strings"
+
+	"vlesspanel/dto"
+	"vlesspanel/model"
+)
 
 // TokenService — выпуск/список/отзыв API-токенов (для ботов/агентов).
 type TokenService struct {
@@ -13,7 +18,7 @@ func NewTokenService(storage Repository, auth *TokenAuth) *TokenService {
 }
 
 // List возвращает выпущенные токены (без raw-токена и без хэша).
-func (s *TokenService) List() ([]APIToken, error) {
+func (s *TokenService) List() ([]model.APIToken, error) {
 	tokens, err := s.storage.LoadTokens()
 	if err != nil {
 		return nil, errInternal("Failed to load tokens")
@@ -25,29 +30,29 @@ func (s *TokenService) List() ([]APIToken, error) {
 }
 
 // Create выпускает новый токен. Raw-токен возвращается один раз.
-func (s *TokenService) Create(req CreateTokenRequest) (CreateTokenResponse, error) {
+func (s *TokenService) Create(req dto.CreateTokenRequest) (dto.CreateTokenResponse, error) {
 	raw := newRawToken()
-	tok := APIToken{
+	tok := model.APIToken{
 		ID:        "tok-" + randID(),
 		Label:     strings.TrimSpace(req.Label),
 		TokenHash: hashToken(raw),
 		CreatedAt: nowStr(),
 	}
 	if err := s.storage.AddToken(tok); err != nil {
-		return CreateTokenResponse{}, errInternal("Failed to create token")
+		return dto.CreateTokenResponse{}, errInternal("Failed to create token")
 	}
 	s.auth.AddIssued(tok.TokenHash)
 
 	tok.TokenHash = ""
-	return CreateTokenResponse{Token: raw, APIToken: tok}, nil
+	return dto.CreateTokenResponse{Token: raw, APIToken: tok}, nil
 }
 
 // Delete отзывает токен по ID.
-func (s *TokenService) Delete(id string) (StatusResponse, error) {
+func (s *TokenService) Delete(id string) (dto.StatusResponse, error) {
 	tok, err := s.storage.DeleteToken(id)
 	if err != nil {
-		return StatusResponse{}, err
+		return dto.StatusResponse{}, err
 	}
 	s.auth.RemoveIssued(tok.TokenHash)
-	return StatusResponse{Status: "revoked", ID: tok.ID}, nil
+	return dto.StatusResponse{Status: "revoked", ID: tok.ID}, nil
 }

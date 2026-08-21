@@ -13,6 +13,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"vlesspanel/model"
+	"vlesspanel/xui"
 )
 
 // PanelAPI handles communication with 3X-UI panels
@@ -39,7 +42,7 @@ func NewPanelAPI() *PanelAPI {
 }
 
 // clientFor возвращает клиент в зависимости от per-panel флага TLS-верификации.
-func (api *PanelAPI) clientFor(panel Panel) *http.Client {
+func (api *PanelAPI) clientFor(panel model.Panel) *http.Client {
 	if panel.InsecureSkipVerify {
 		return api.insecure
 	}
@@ -47,7 +50,7 @@ func (api *PanelAPI) clientFor(panel Panel) *http.Client {
 }
 
 // buildURL constructs the full API URL for a panel endpoint
-func (api *PanelAPI) buildURL(panel Panel, path string) string {
+func (api *PanelAPI) buildURL(panel model.Panel, path string) string {
 	base := strings.TrimRight(panel.URL, "/")
 	if panel.WebBasePath != "" {
 		base = strings.TrimRight(base+"/"+strings.Trim(panel.WebBasePath, "/"), "/")
@@ -60,7 +63,7 @@ func (api *PanelAPI) buildURL(panel Panel, path string) string {
 // failures (timeout, connection refused, DNS, TLS, EOF) are wrapped as
 // ErrPanelUnreachable so callers can dispatch via errors.Is instead of
 // strings.Contains-парсинга.
-func (api *PanelAPI) doRequest(method, url string, panel Panel, body io.Reader) (*http.Response, error) {
+func (api *PanelAPI) doRequest(method, url string, panel model.Panel, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -79,7 +82,7 @@ func (api *PanelAPI) doRequest(method, url string, panel Panel, body io.Reader) 
 }
 
 // parseResponse parses a 3X-UI API response
-func (api *PanelAPI) parseResponse(resp *http.Response) (*XUIResponse, error) {
+func (api *PanelAPI) parseResponse(resp *http.Response) (*xui.XUIResponse, error) {
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
@@ -92,7 +95,7 @@ func (api *PanelAPI) parseResponse(resp *http.Response) (*XUIResponse, error) {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(data))
 	}
 
-	var xuiResp XUIResponse
+	var xuiResp xui.XUIResponse
 	if err := json.Unmarshal(data, &xuiResp); err != nil {
 		log.Printf("parseResponse: failed to unmarshal 3X-UI response: %v\nBody: %s", err, string(data))
 		return nil, fmt.Errorf("parsing response: %w", err)
@@ -102,7 +105,7 @@ func (api *PanelAPI) parseResponse(resp *http.Response) (*XUIResponse, error) {
 }
 
 // ListInbounds fetches all inbounds from a panel
-func (api *PanelAPI) ListInbounds(panel Panel) ([]XUIInbound, error) {
+func (api *PanelAPI) ListInbounds(panel model.Panel) ([]xui.XUIInbound, error) {
 	url := api.buildURL(panel, "panel/api/inbounds/list")
 
 	resp, err := api.doRequest("GET", url, panel, nil)
@@ -119,13 +122,13 @@ func (api *PanelAPI) ListInbounds(panel Panel) ([]XUIInbound, error) {
 		return nil, fmt.Errorf("3X-UI error: %s", xuiResp.Msg)
 	}
 
-	// Parse the obj field into []XUIInbound
+	// Parse the obj field into []xui.XUIInbound
 	objBytes, err := json.Marshal(xuiResp.Obj)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling obj: %w", err)
 	}
 
-	var inbounds []XUIInbound
+	var inbounds []xui.XUIInbound
 	if err := json.Unmarshal(objBytes, &inbounds); err != nil {
 		log.Printf("ListInbounds: failed to unmarshal inbounds array: %v\nObj JSON: %s", err, string(objBytes))
 		return nil, fmt.Errorf("parsing inbounds: %w", err)
@@ -135,7 +138,7 @@ func (api *PanelAPI) ListInbounds(panel Panel) ([]XUIInbound, error) {
 }
 
 // fetchXUIClients fetches raw clients from /panel/api/clients/list (3X-UI v3.4.2+)
-func (api *PanelAPI) fetchXUIClients(panel Panel) ([]XUIClient, error) {
+func (api *PanelAPI) fetchXUIClients(panel model.Panel) ([]xui.XUIClient, error) {
 	url := api.buildURL(panel, "panel/api/clients/list")
 
 	resp, err := api.doRequest("GET", url, panel, nil)
@@ -157,7 +160,7 @@ func (api *PanelAPI) fetchXUIClients(panel Panel) ([]XUIClient, error) {
 		return nil, fmt.Errorf("marshaling obj: %w", err)
 	}
 
-	var xuiClients []XUIClient
+	var xuiClients []xui.XUIClient
 	if err := json.Unmarshal(objBytes, &xuiClients); err != nil {
 		log.Printf("fetchXUIClients: failed to unmarshal clients: %v\nObj: %s", err, string(objBytes))
 		return nil, fmt.Errorf("parsing clients: %w", err)
@@ -166,15 +169,15 @@ func (api *PanelAPI) fetchXUIClients(panel Panel) ([]XUIClient, error) {
 	return xuiClients, nil
 }
 
-// mapClientsToInbounds converts raw XUI clients into Client, resolving inbound
+// mapClientsToInbounds converts raw XUI clients into model.Client, resolving inbound
 // IDs to remark names via the inbounds list.
-func mapClientsToInbounds(xuiClients []XUIClient, inbounds []XUIInbound) []Client {
+func mapClientsToInbounds(xuiClients []xui.XUIClient, inbounds []xui.XUIInbound) []model.Client {
 	remarkMap := make(map[int]string, len(inbounds))
 	for _, ib := range inbounds {
 		remarkMap[ib.ID] = ib.Remark
 	}
 
-	clients := make([]Client, 0, len(xuiClients))
+	clients := make([]model.Client, 0, len(xuiClients))
 	for _, xc := range xuiClients {
 		if xc.Email == "" {
 			continue
@@ -185,14 +188,14 @@ func mapClientsToInbounds(xuiClients []XUIClient, inbounds []XUIInbound) []Clien
 				inboundRemarks = append(inboundRemarks, remark)
 			}
 		}
-		clients = append(clients, Client{
+		clients = append(clients, model.Client{
 			ID:         xc.Email,
 			Email:      xc.Email,
 			Enable:     xc.Enable,
 			ExpiryTime: xc.ExpiryTime,
 			InboundIDs: xc.InboundIDs,
 			Inbounds:   inboundRemarks,
-			Keys:       []VLESSKey{},
+			Keys:       []model.VLESSKey{},
 			Up:         xc.Traffic.Up,
 			Down:       xc.Traffic.Down,
 		})
@@ -202,7 +205,7 @@ func mapClientsToInbounds(xuiClients []XUIClient, inbounds []XUIInbound) []Clien
 }
 
 // ListClientsDirect uses the dedicated /panel/api/clients/list endpoint (3X-UI v3.4.2+)
-func (api *PanelAPI) ListClientsDirect(panel Panel) ([]Client, error) {
+func (api *PanelAPI) ListClientsDirect(panel model.Panel) ([]model.Client, error) {
 	xuiClients, err := api.fetchXUIClients(panel)
 	if err != nil {
 		return nil, err
@@ -220,11 +223,11 @@ func (api *PanelAPI) ListClientsDirect(panel Panel) ([]Client, error) {
 // ListClientsAndInbounds fetches clients and inbounds in parallel (one panel
 // snapshot). Falls back to inbounds-based client extraction when the direct
 // clients endpoint is unavailable; inbounds are required for status enrichment.
-func (api *PanelAPI) ListClientsAndInbounds(panel Panel) ([]Client, []XUIInbound, error) {
+func (api *PanelAPI) ListClientsAndInbounds(panel model.Panel) ([]model.Client, []xui.XUIInbound, error) {
 	type res struct {
 		kind     string // "clients" | "inbounds"
-		clients  []XUIClient
-		inbounds []XUIInbound
+		clients  []xui.XUIClient
+		inbounds []xui.XUIInbound
 		err      error
 	}
 	ch := make(chan res, 2)
@@ -237,8 +240,8 @@ func (api *PanelAPI) ListClientsAndInbounds(panel Panel) ([]Client, []XUIInbound
 		ch <- res{kind: "inbounds", inbounds: inbounds, err: err}
 	}()
 
-	var xuiClients []XUIClient
-	var inbounds []XUIInbound
+	var xuiClients []xui.XUIClient
+	var inbounds []xui.XUIInbound
 	var cerr, ierr error
 	for i := 0; i < 2; i++ {
 		r := <-ch
@@ -261,7 +264,7 @@ func (api *PanelAPI) ListClientsAndInbounds(panel Panel) ([]Client, []XUIInbound
 }
 
 // ListClients extracts all clients, trying the direct endpoint first with inbounds fallback
-func (api *PanelAPI) ListClients(panel Panel) ([]Client, error) {
+func (api *PanelAPI) ListClients(panel model.Panel) ([]model.Client, error) {
 	clients, err := api.ListClientsDirect(panel)
 	if err == nil {
 		return clients, nil
@@ -271,7 +274,7 @@ func (api *PanelAPI) ListClients(panel Panel) ([]Client, error) {
 }
 
 // listClientsFromInbounds extracts all clients from all inbounds (legacy method)
-func (api *PanelAPI) listClientsFromInbounds(panel Panel) ([]Client, error) {
+func (api *PanelAPI) listClientsFromInbounds(panel model.Panel) ([]model.Client, error) {
 	inbounds, err := api.ListInbounds(panel)
 	if err != nil {
 		return nil, err
@@ -281,8 +284,8 @@ func (api *PanelAPI) listClientsFromInbounds(panel Panel) ([]Client, error) {
 }
 
 // clientsFromInbounds extracts all clients from an already-fetched inbounds list.
-func clientsFromInbounds(inbounds []XUIInbound) []Client {
-	clientMap := make(map[string]*Client)
+func clientsFromInbounds(inbounds []xui.XUIInbound) []model.Client {
+	clientMap := make(map[string]*model.Client)
 
 	for _, inbound := range inbounds {
 		if inbound.ClientStats == nil {
@@ -318,13 +321,13 @@ func clientsFromInbounds(inbounds []XUIInbound) []Client {
 				existing.Up += stat.Up
 				existing.Down += stat.Down
 			} else {
-				client := Client{
+				client := model.Client{
 					ID:         clientID,
 					Email:      stat.Email,
 					Enable:     stat.Enable,
 					InboundIDs: []int{inbound.ID},
 					Inbounds:   []string{inbound.Remark},
-					Keys:       []VLESSKey{},
+					Keys:       []model.VLESSKey{},
 					Up:         stat.Up,
 					Down:       stat.Down,
 				}
@@ -333,7 +336,7 @@ func clientsFromInbounds(inbounds []XUIInbound) []Client {
 		}
 	}
 
-	clients := make([]Client, 0, len(clientMap))
+	clients := make([]model.Client, 0, len(clientMap))
 	for _, c := range clientMap {
 		clients = append(clients, *c)
 	}
@@ -343,7 +346,7 @@ func clientsFromInbounds(inbounds []XUIInbound) []Client {
 
 // GetClientLinks fetches the links the panel itself generates for a client
 // (the same strings the panel UI's Copy URL button copies), keyed by inbound port.
-func (api *PanelAPI) GetClientLinks(panel Panel, email string) (map[int]string, error) {
+func (api *PanelAPI) GetClientLinks(panel model.Panel, email string) (map[int]string, error) {
 	_url := api.buildURL(panel, "panel/api/clients/links/"+url.PathEscape(email))
 
 	resp, err := api.doRequest("GET", _url, panel, nil)
@@ -388,7 +391,7 @@ func (api *PanelAPI) GetClientLinks(panel Panel, email string) (map[int]string, 
 }
 
 // GetClientKeys fetches VLESS keys for a specific client across all inbounds
-func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error) {
+func (api *PanelAPI) GetClientKeys(panel model.Panel, email string) ([]model.VLESSKey, error) {
 	inbounds, err := api.ListInbounds(panel)
 	if err != nil {
 		return nil, err
@@ -409,7 +412,7 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 // bounded concurrency. Returns keys grouped by email and the inbounds snapshot
 // (caller maps inboundID → port). Used by regenerate-all to avoid the N+1
 // pattern of GetClientKeyForInbound.
-func (api *PanelAPI) GetClientKeysForEmails(panel Panel, emails []string, concurrency int) (map[string][]VLESSKey, []XUIInbound, error) {
+func (api *PanelAPI) GetClientKeysForEmails(panel model.Panel, emails []string, concurrency int) (map[string][]model.VLESSKey, []xui.XUIInbound, error) {
 	inbounds, err := api.ListInbounds(panel)
 	if err != nil {
 		return nil, nil, err
@@ -418,7 +421,7 @@ func (api *PanelAPI) GetClientKeysForEmails(panel Panel, emails []string, concur
 	if concurrency < 1 {
 		concurrency = 1
 	}
-	keys := make(map[string][]VLESSKey, len(emails))
+	keys := make(map[string][]model.VLESSKey, len(emails))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, concurrency)
@@ -448,8 +451,8 @@ func (api *PanelAPI) GetClientKeysForEmails(panel Panel, emails []string, concur
 // buildClientKeys constructs VLESS keys for one client across all inbounds from
 // an already-fetched inbounds snapshot and the panel's links (keyed by port).
 // Pure: no HTTP calls.
-func buildClientKeys(panel Panel, inbounds []XUIInbound, panelLinks map[int]string, email string) []VLESSKey {
-	var keys []VLESSKey
+func buildClientKeys(panel model.Panel, inbounds []xui.XUIInbound, panelLinks map[int]string, email string) []model.VLESSKey {
+	var keys []model.VLESSKey
 
 	for _, inbound := range inbounds {
 		// Parse settings — 3X-UI v3.4.2+ returns settings as JSON object
@@ -538,7 +541,7 @@ func buildClientKeys(panel Panel, inbounds []XUIInbound, panelLinks map[int]stri
 				}
 			}
 
-			keys = append(keys, VLESSKey{
+			keys = append(keys, model.VLESSKey{
 				Label:     fmt.Sprintf("%s-%s", inbound.Remark, email),
 				Protocol:  inbound.Protocol,
 				Link:      link,
@@ -555,7 +558,7 @@ func buildClientKeys(panel Panel, inbounds []XUIInbound, panelLinks map[int]stri
 }
 
 // CreateClient creates a new client on a panel's inbounds (3X-UI v3.5.0+)
-func (api *PanelAPI) CreateClient(panel Panel, inboundID int, email string, expiryDate string) error {
+func (api *PanelAPI) CreateClient(panel model.Panel, inboundID int, email string, expiryDate string) error {
 	url := api.buildURL(panel, "panel/api/clients/add")
 
 	clientObj := map[string]interface{}{
@@ -610,7 +613,7 @@ func (api *PanelAPI) CreateClient(panel Panel, inboundID int, email string, expi
 // REALITY keys. So after a successful attach we push a targeted update with
 // flow=xtls-rprx-vision: 3X-UI re-applies clientWithInboundFlow per inbound,
 // keeping the flow on flow-eligible inbounds and stripping it on others.
-func (api *PanelAPI) AttachClient(panel Panel, email string, inboundID int) error {
+func (api *PanelAPI) AttachClient(panel model.Panel, email string, inboundID int) error {
 	_url := api.buildURL(panel, fmt.Sprintf("panel/api/clients/%s/attach", email))
 
 	payload := map[string]interface{}{
@@ -650,7 +653,7 @@ func (api *PanelAPI) AttachClient(panel Panel, email string, inboundID int) erro
 // via a targeted 3X-UI update (?inboundIds=<id>). Current expiryTime is passed
 // through so the partial update doesn't wipe it (3X-UI replaces the client in
 // the inbound settings wholesale).
-func (api *PanelAPI) SetClientFlow(panel Panel, email string, inboundID int) error {
+func (api *PanelAPI) SetClientFlow(panel model.Panel, email string, inboundID int) error {
 	stats, err := api.GetClientStats(panel, email)
 	if err != nil {
 		return fmt.Errorf("fetching client before flow update: %w", err)
@@ -690,7 +693,7 @@ func (api *PanelAPI) SetClientFlow(panel Panel, email string, inboundID int) err
 }
 
 // DetachClient detaches a client from an inbound
-func (api *PanelAPI) DetachClient(panel Panel, email string, inboundID int) error {
+func (api *PanelAPI) DetachClient(panel model.Panel, email string, inboundID int) error {
 	_url := api.buildURL(panel, fmt.Sprintf("panel/api/clients/%s/detach", email))
 
 	payload := map[string]interface{}{
@@ -723,7 +726,7 @@ func (api *PanelAPI) DetachClient(panel Panel, email string, inboundID int) erro
 // flow=xtls-rprx-vision is always sent: 3X-UI's Update replaces the client in
 // each inbound's settings, so omitting flow would silently strip it (an empty
 // flow survives clientWithInboundFlow on flow-eligible inbounds).
-func (api *PanelAPI) UpdateClient(panel Panel, email string, expiryTime int64) error {
+func (api *PanelAPI) UpdateClient(panel model.Panel, email string, expiryTime int64) error {
 	_url := api.buildURL(panel, fmt.Sprintf("panel/api/clients/update/%s", email))
 
 	payload := map[string]interface{}{
@@ -760,10 +763,10 @@ func (api *PanelAPI) UpdateClient(panel Panel, email string, expiryTime int64) e
 // GetClientKeyForInbound returns the VLESS key for a specific client on a
 // specific inbound (matched by inbound port). Fails if the client/inbound
 // no longer exists on the panel.
-func (api *PanelAPI) GetClientKeyForInbound(panel Panel, email string, inboundID int) (VLESSKey, error) {
+func (api *PanelAPI) GetClientKeyForInbound(panel model.Panel, email string, inboundID int) (model.VLESSKey, error) {
 	inbounds, err := api.ListInbounds(panel)
 	if err != nil {
-		return VLESSKey{}, err
+		return model.VLESSKey{}, err
 	}
 
 	var targetPort int
@@ -776,12 +779,12 @@ func (api *PanelAPI) GetClientKeyForInbound(panel Panel, email string, inboundID
 		}
 	}
 	if !foundInbound {
-		return VLESSKey{}, fmt.Errorf("%w: inbound %d", ErrInboundNotFound, inboundID)
+		return model.VLESSKey{}, fmt.Errorf("%w: inbound %d", ErrInboundNotFound, inboundID)
 	}
 
 	keys, err := api.GetClientKeys(panel, email)
 	if err != nil {
-		return VLESSKey{}, err
+		return model.VLESSKey{}, err
 	}
 
 	for _, k := range keys {
@@ -790,12 +793,12 @@ func (api *PanelAPI) GetClientKeyForInbound(panel Panel, email string, inboundID
 		}
 	}
 
-	return VLESSKey{}, fmt.Errorf("%w: client %s on inbound %d", ErrClientNotFound, email, inboundID)
+	return model.VLESSKey{}, fmt.Errorf("%w: client %s on inbound %d", ErrClientNotFound, email, inboundID)
 }
 
 // GetClientStats fetches traffic/expiry stats for a client from the panel's
 // /panel/api/clients/list endpoint (present in 3X-UI 3.3.1+).
-func (api *PanelAPI) GetClientStats(panel Panel, email string) (*Client, error) {
+func (api *PanelAPI) GetClientStats(panel model.Panel, email string) (*model.Client, error) {
 	clients, err := api.ListClients(panel)
 	if err != nil {
 		return nil, err

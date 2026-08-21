@@ -5,6 +5,9 @@ import (
 	"os"
 	"sync"
 	"testing"
+
+	"vlesspanel/dto"
+	"vlesspanel/model"
 )
 
 func newTestStorage(t *testing.T) *Storage {
@@ -19,7 +22,7 @@ func newTestStorage(t *testing.T) *Storage {
 func TestAddKeySourceConcurrentDedup(t *testing.T) {
 	s := newTestStorage(t)
 	const n = 50
-	ks := KeySource{
+	ks := model.KeySource{
 		ID:        "ks-test",
 		Type:      "manual",
 		VlessLink: "vless://test@example.com:443?security=reality",
@@ -72,13 +75,13 @@ func TestAddPanelConcurrentUniqueID(t *testing.T) {
 	const n = 20
 
 	var wg sync.WaitGroup
-	panels := make([]Panel, n)
+	panels := make([]model.Panel, n)
 	errs := make([]error, n)
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			p, err := s.AddPanel(CreatePanelRequest{Name: "Test Panel", URL: "https://x", Token: "t"})
+			p, err := s.AddPanel(dto.CreatePanelRequest{Name: "Test model.Panel", URL: "https://x", Token: "t"})
 			panels[i] = p
 			errs[i] = err
 		}(i)
@@ -117,7 +120,7 @@ func TestUpsertSubMetaConcurrentNoLostUpdate(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			errs[i] = s.UpsertSubMeta(Subscription{
+			errs[i] = s.UpsertSubMeta(model.Subscription{
 				Name:   fmt.Sprintf("sub-%d", i),
 				Status: "active",
 			})
@@ -166,7 +169,7 @@ func TestSubscriptionFileRejectsUnsafeNames(t *testing.T) {
 		if _, err := s.GetSubscriptionRaw(name); err == nil {
 			t.Errorf("GetSubscriptionRaw(%q) should be rejected", name)
 		}
-		if err := s.WriteSubscriptionFile(name, []SubKey{{Link: "vless://x"}}); err == nil {
+		if err := s.WriteSubscriptionFile(name, []model.SubKey{{Link: "vless://x"}}); err == nil {
 			t.Errorf("WriteSubscriptionFile(%q) should be rejected", name)
 		}
 		if err := s.RemoveSubscriptionFile(name); err == nil {
@@ -186,7 +189,7 @@ func TestSubscriptionFileRejectsUnsafeNames(t *testing.T) {
 	}
 
 	// Валидное имя по-прежнему работает.
-	if err := s.WriteSubscriptionFile("ok-name", []SubKey{{Link: "vless://x"}}); err != nil {
+	if err := s.WriteSubscriptionFile("ok-name", []model.SubKey{{Link: "vless://x"}}); err != nil {
 		t.Fatalf("valid name rejected: %v", err)
 	}
 	if raw, err := s.GetSubscriptionRaw("ok-name"); err != nil || raw != "vless://x\n" {
@@ -194,13 +197,13 @@ func TestSubscriptionFileRejectsUnsafeNames(t *testing.T) {
 	}
 }
 
-// UpdateKeySourceCaches должен обновить кэш нескольких KeySource одной атомарной
+// UpdateKeySourceCaches должен обновить кэш нескольких model.KeySource одной атомарной
 // записью и не трогать отсутствующие ID.
 func TestUpdateKeySourceCaches(t *testing.T) {
 	s := newTestStorage(t)
 
 	mk := func(id string) {
-		_, _, err := s.AddKeySource(KeySource{ID: id, Type: "manual", VlessLink: "vless://" + id + "@x", Label: id})
+		_, _, err := s.AddKeySource(model.KeySource{ID: id, Type: "manual", VlessLink: "vless://" + id + "@x", Label: id})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -208,7 +211,7 @@ func TestUpdateKeySourceCaches(t *testing.T) {
 	mk("a")
 	mk("b")
 
-	err := s.UpdateKeySourceCaches(map[string]CachedKey{
+	err := s.UpdateKeySourceCaches(map[string]model.CachedKey{
 		"a":     {Link: "vless://a@x"},
 		"b":     {Link: "vless://b@x"},
 		"ghost": {Link: "vless://ghost@x"},

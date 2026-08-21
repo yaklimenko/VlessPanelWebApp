@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"testing"
+
+	"vlesspanel/model"
 )
 
 func TestTokenAuth(t *testing.T) {
@@ -44,10 +46,10 @@ func TestTokenAuth(t *testing.T) {
 func TestStorageTokens(t *testing.T) {
 	s := newTestStorage(t)
 
-	if err := s.AddToken(APIToken{ID: "tok-1", Label: "bot", TokenHash: "hash1", CreatedAt: "now"}); err != nil {
+	if err := s.AddToken(model.APIToken{ID: "tok-1", Label: "bot", TokenHash: "hash1", CreatedAt: "now"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.AddToken(APIToken{ID: "tok-2", Label: "agent", TokenHash: "hash2", CreatedAt: "now"}); err != nil {
+	if err := s.AddToken(model.APIToken{ID: "tok-2", Label: "agent", TokenHash: "hash2", CreatedAt: "now"}); err != nil {
 		t.Fatal(err)
 	}
 

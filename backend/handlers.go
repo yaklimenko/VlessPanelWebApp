@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 
+	"vlesspanel/dto"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -68,7 +70,7 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	}
 }
 
-// --- Panel Handlers ---
+// --- model.Panel Handlers ---
 
 func (h *Handlers) ListPanels(w http.ResponseWriter, r *http.Request) {
 	panels, err := h.panels.List()
@@ -80,7 +82,7 @@ func (h *Handlers) ListPanels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) CreatePanel(w http.ResponseWriter, r *http.Request) {
-	var req CreatePanelRequest
+	var req dto.CreatePanelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -101,7 +103,7 @@ func (h *Handlers) DeletePanel(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-// --- Client Handlers ---
+// --- model.Client Handlers ---
 
 func (h *Handlers) ListClients(w http.ResponseWriter, r *http.Request) {
 	clients, err := h.panels.ListClients(chi.URLParam(r, "id"))
@@ -113,7 +115,7 @@ func (h *Handlers) ListClients(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) CreateClient(w http.ResponseWriter, r *http.Request) {
-	var req CreateClientRequest
+	var req dto.CreateClientRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -177,7 +179,7 @@ func (h *Handlers) DetachInbound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) UpdateClient(w http.ResponseWriter, r *http.Request) {
-	var req UpdateClientRequest
+	var req dto.UpdateClientRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -190,7 +192,7 @@ func (h *Handlers) UpdateClient(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, resp)
 }
 
-// --- Subscription Handlers ---
+// --- model.Subscription Handlers ---
 
 func (h *Handlers) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	subs, err := h.subscriptions.List()
@@ -202,7 +204,7 @@ func (h *Handlers) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) CreateSubscription(w http.ResponseWriter, r *http.Request) {
-	var req CreateSubscriptionRequest
+	var req dto.CreateSubscriptionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -225,7 +227,7 @@ func (h *Handlers) GetSubscription(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
-	var req UpdateSubscriptionRequest
+	var req dto.UpdateSubscriptionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -278,7 +280,7 @@ func (h *Handlers) RegenerateAllSubscriptions(w http.ResponseWriter, r *http.Req
 	respondJSON(w, http.StatusOK, resp)
 }
 
-// --- KeySource Handlers ---
+// --- model.KeySource Handlers ---
 
 func (h *Handlers) ListKeySources(w http.ResponseWriter, r *http.Request) {
 	sources, err := h.keySources.List()
@@ -290,7 +292,7 @@ func (h *Handlers) ListKeySources(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) CreateKeySource(w http.ResponseWriter, r *http.Request) {
-	var req CreateKeySourceRequest
+	var req dto.CreateKeySourceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -390,7 +392,7 @@ func (h *Handlers) ListTokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) CreateToken(w http.ResponseWriter, r *http.Request) {
-	var req CreateTokenRequest
+	var req dto.CreateTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return

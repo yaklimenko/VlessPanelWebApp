@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"vlesspanel/model"
+	"vlesspanel/xui"
 )
 
 // buildClientKeys (чистая функция) должен строить VLESS-ключ из инбаунда +
 // клиента, с корректным host-извлечением и параметрами REALITY.
 func TestBuildClientKeys(t *testing.T) {
-	panel := Panel{ID: "p", URL: "https://203.0.113.3:5867"}
-	inbound := XUIInbound{
+	panel := model.Panel{ID: "p", URL: "https://203.0.113.3:5867"}
+	inbound := xui.XUIInbound{
 		ID:       5,
 		Remark:   "PL1",
 		Port:     11471,
@@ -18,7 +21,7 @@ func TestBuildClientKeys(t *testing.T) {
 		Settings: json.RawMessage(`{"clients":[{"id":"client-uuid","email":"test@x","flow":"xtls-rprx-vision"}]}`),
 	}
 
-	keys := buildClientKeys(panel, []XUIInbound{inbound}, nil, "test@x")
+	keys := buildClientKeys(panel, []xui.XUIInbound{inbound}, nil, "test@x")
 
 	if len(keys) != 1 {
 		t.Fatalf("expected 1 key, got %d", len(keys))

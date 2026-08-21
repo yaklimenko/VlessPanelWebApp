@@ -6,6 +6,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"vlesspanel/dto"
+	"vlesspanel/model"
 )
 
 // SubscriptionService — use cases для подписок (генерация/обновление/синк-статус).
@@ -21,7 +24,7 @@ func NewSubscriptionService(storage Repository, panelAPI PanelClient, sync *Sync
 }
 
 // enrichSync проставляет sync-статус подписки из глобального флага.
-func (s *SubscriptionService) enrichSync(sub *Subscription) {
+func (s *SubscriptionService) enrichSync(sub *model.Subscription) {
 	if sub == nil {
 		return
 	}
@@ -47,7 +50,7 @@ func (s *SubscriptionService) subscriptionNameTaken(name string) bool {
 	return false
 }
 
-func (s *SubscriptionService) List() ([]Subscription, error) {
+func (s *SubscriptionService) List() ([]model.Subscription, error) {
 	subs, err := s.storage.ListSubscriptions()
 	if err != nil {
 		return nil, errInternal("Failed to list subscriptions")
@@ -58,7 +61,7 @@ func (s *SubscriptionService) List() ([]Subscription, error) {
 	return subs, nil
 }
 
-func (s *SubscriptionService) Get(id string) (*Subscription, error) {
+func (s *SubscriptionService) Get(id string) (*model.Subscription, error) {
 	sub, err := s.storage.GetSubscription(id)
 	if err != nil {
 		return nil, err
@@ -75,30 +78,30 @@ func (s *SubscriptionService) Raw(id string) (string, error) {
 }
 
 // Create создаёт подписку из KeySources (или legacy keys) и генерирует файл.
-func (s *SubscriptionService) Create(req CreateSubscriptionRequest) (SubscriptionGenerateResponse, error) {
+func (s *SubscriptionService) Create(req dto.CreateSubscriptionRequest) (dto.SubscriptionGenerateResponse, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		return SubscriptionGenerateResponse{}, errBadRequest("name is required")
+		return dto.SubscriptionGenerateResponse{}, errBadRequest("name is required")
 	}
 	if !validSubscriptionName(name) {
-		return SubscriptionGenerateResponse{}, errBadRequest("имя может содержать только буквы, цифры, _ и -")
+		return dto.SubscriptionGenerateResponse{}, errBadRequest("имя может содержать только буквы, цифры, _ и -")
 	}
 	if s.subscriptionNameTaken(name) {
-		return SubscriptionGenerateResponse{}, errConflict(fmt.Sprintf("подписка с именем «%s» уже существует", name))
+		return dto.SubscriptionGenerateResponse{}, errConflict(fmt.Sprintf("подписка с именем «%s» уже существует", name))
 	}
 
-	report := &GenerationReport{Items: []GenerationReportItem{}}
+	report := &model.GenerationReport{Items: []model.GenerationReportItem{}}
 
-	keys := []SubKey{}
+	keys := []model.SubKey{}
 	if len(req.KeySourceIDs) > 0 {
 		var err error
 		keys, err = s.resolveKeySources(req.KeySourceIDs, report, true)
 		if err != nil {
-			return SubscriptionGenerateResponse{}, errInternal("Не удалось извлечь ключи: " + err.Error())
+			return dto.SubscriptionGenerateResponse{}, errInternal("Не удалось извлечь ключи: " + err.Error())
 		}
 	} else if len(req.Keys) > 0 {
 		keys = req.Keys
-		report.Items = append(report.Items, GenerationReportItem{Kind: "manual", Label: "manual (legacy)"})
+		report.Items = append(report.Items, model.GenerationReportItem{Kind: "manual", Label: "manual (legacy)"})
 	}
 
 	status := "active"
@@ -107,15 +110,15 @@ func (s *SubscriptionService) Create(req CreateSubscriptionRequest) (Subscriptio
 	}
 	if status == "active" {
 		if err := s.storage.WriteSubscriptionFile(name, keys); err != nil {
-			return SubscriptionGenerateResponse{}, errInternal("Failed to write subscription file")
+			return dto.SubscriptionGenerateResponse{}, errInternal("Failed to write subscription file")
 		}
 		s.sync.Mark()
 	}
 
 	now := nowStr()
-	meta := Subscription{ID: name, Name: name, Status: status, Keys: keys, UpdatedAt: now}
+	meta := model.Subscription{ID: name, Name: name, Status: status, Keys: keys, UpdatedAt: now}
 	if err := s.storage.UpsertSubMeta(meta); err != nil {
-		return SubscriptionGenerateResponse{}, errInternal("Failed to save subscription")
+		return dto.SubscriptionGenerateResponse{}, errInternal("Failed to save subscription")
 	}
 
 	meta.FileMtime = s.storage.SubscriptionFileMtime(name)
@@ -124,7 +127,7 @@ func (s *SubscriptionService) Create(req CreateSubscriptionRequest) (Subscriptio
 	report.Included = countKind(report.Items, "ok") + countKind(report.Items, "manual")
 	report.Skipped = countKind(report.Items, "skip")
 
-	return SubscriptionGenerateResponse{
+	return dto.SubscriptionGenerateResponse{
 		Subscription: meta,
 		Report:       report.Items,
 		Included:     report.Included,
@@ -133,12 +136,12 @@ func (s *SubscriptionService) Create(req CreateSubscriptionRequest) (Subscriptio
 }
 
 // Update обновляет подписку (режимы: rename / regenerate / addKeySourceIds /
-// removeKeyId / legacy keys). Возвращает Subscription, либо Generate-отчёт
+// removeKeyId / legacy keys). Возвращает model.Subscription, либо Generate-отчёт
 // для режима regenerate.
-func (s *SubscriptionService) Update(id string, req UpdateSubscriptionRequest) (UpdateSubscriptionResult, error) {
+func (s *SubscriptionService) Update(id string, req dto.UpdateSubscriptionRequest) (dto.UpdateSubscriptionResult, error) {
 	sub, err := s.storage.GetSubscription(id)
 	if err != nil {
-		return UpdateSubscriptionResult{}, err
+		return dto.UpdateSubscriptionResult{}, err
 	}
 
 	meta := *sub
@@ -150,37 +153,37 @@ func (s *SubscriptionService) Update(id string, req UpdateSubscriptionRequest) (
 	// ─── Rename ───
 	if req.Name != "" && req.Name != id {
 		if !validSubscriptionName(req.Name) {
-			return UpdateSubscriptionResult{}, errBadRequest("имя может содержать только буквы, цифры, _ и -")
+			return dto.UpdateSubscriptionResult{}, errBadRequest("имя может содержать только буквы, цифры, _ и -")
 		}
 		if s.subscriptionNameTaken(req.Name) {
-			return UpdateSubscriptionResult{}, errConflict(fmt.Sprintf("подписка с именем «%s» уже существует", req.Name))
+			return dto.UpdateSubscriptionResult{}, errConflict(fmt.Sprintf("подписка с именем «%s» уже существует", req.Name))
 		}
 		if s.storage.SubscriptionFileExists(id) {
 			if err := s.storage.RenameSubscriptionFile(id, req.Name); err != nil {
-				return UpdateSubscriptionResult{}, errInternal(err.Error())
+				return dto.UpdateSubscriptionResult{}, errInternal(err.Error())
 			}
 			s.sync.Mark()
 		}
 		if err := s.storage.DeleteSubMeta(id); err != nil {
-			return UpdateSubscriptionResult{}, errInternal(err.Error())
+			return dto.UpdateSubscriptionResult{}, errInternal(err.Error())
 		}
 		meta.Name = req.Name
 		meta.ID = req.Name
 		meta.UpdatedAt = nowStr()
 		if err := s.storage.UpsertSubMeta(meta); err != nil {
-			return UpdateSubscriptionResult{}, errInternal(err.Error())
+			return dto.UpdateSubscriptionResult{}, errInternal(err.Error())
 		}
 		meta.FileMtime = s.storage.SubscriptionFileMtime(meta.Name)
 		s.enrichSync(&meta)
-		return UpdateSubscriptionResult{Subscription: meta}, nil
+		return dto.UpdateSubscriptionResult{Subscription: meta}, nil
 	}
 
 	// ─── Regenerate ───
 	if req.Regenerate {
-		report := &GenerationReport{Items: []GenerationReportItem{}}
+		report := &model.GenerationReport{Items: []model.GenerationReportItem{}}
 		keys, err := s.regenerateKeys(meta.Keys, report)
 		if err != nil {
-			return UpdateSubscriptionResult{}, errInternal("Не удалось перегенерировать: " + err.Error())
+			return dto.UpdateSubscriptionResult{}, errInternal("Не удалось перегенерировать: " + err.Error())
 		}
 
 		meta.Keys = keys
@@ -191,18 +194,18 @@ func (s *SubscriptionService) Update(id string, req UpdateSubscriptionRequest) (
 		} else {
 			meta.Status = "active"
 			if err := s.storage.WriteSubscriptionFile(meta.Name, keys); err != nil {
-				return UpdateSubscriptionResult{}, errInternal("Failed to write subscription file")
+				return dto.UpdateSubscriptionResult{}, errInternal("Failed to write subscription file")
 			}
 		}
 		s.sync.Mark()
 		if err := s.storage.UpsertSubMeta(meta); err != nil {
-			return UpdateSubscriptionResult{}, errInternal(err.Error())
+			return dto.UpdateSubscriptionResult{}, errInternal(err.Error())
 		}
 		report.Included = countKind(report.Items, "ok") + countKind(report.Items, "manual")
 		report.Skipped = countKind(report.Items, "skip")
 		meta.FileMtime = s.storage.SubscriptionFileMtime(meta.Name)
 		s.enrichSync(&meta)
-		return UpdateSubscriptionResult{Generate: &SubscriptionGenerateResponse{
+		return dto.UpdateSubscriptionResult{Generate: &dto.SubscriptionGenerateResponse{
 			Subscription: meta,
 			Report:       report.Items,
 			Included:     report.Included,
@@ -210,30 +213,30 @@ func (s *SubscriptionService) Update(id string, req UpdateSubscriptionRequest) (
 		}}, nil
 	}
 
-	// ─── Add KeySource refs (no file write) ───
+	// ─── Add model.KeySource refs (no file write) ───
 	if len(req.AddKeySourceIDs) > 0 {
 		for _, ksID := range req.AddKeySourceIDs {
 			if keySourceInKeys(meta.Keys, ksID) {
 				continue
 			}
 			if _, err := s.storage.GetKeySource(ksID); err != nil {
-				return UpdateSubscriptionResult{}, errBadRequest("KeySource не найден: " + ksID)
+				return dto.UpdateSubscriptionResult{}, errBadRequest("model.KeySource не найден: " + ksID)
 			}
 			sid := ksID
-			meta.Keys = append(meta.Keys, SubKey{ID: "k-" + randID(), KeySourceID: &sid})
+			meta.Keys = append(meta.Keys, model.SubKey{ID: "k-" + randID(), KeySourceID: &sid})
 		}
 		meta.UpdatedAt = nowStr()
 		if err := s.storage.UpsertSubMeta(meta); err != nil {
-			return UpdateSubscriptionResult{}, errInternal(err.Error())
+			return dto.UpdateSubscriptionResult{}, errInternal(err.Error())
 		}
 		meta.FileMtime = s.storage.SubscriptionFileMtime(meta.Name)
 		s.enrichSync(&meta)
-		return UpdateSubscriptionResult{Subscription: meta}, nil
+		return dto.UpdateSubscriptionResult{Subscription: meta}, nil
 	}
 
 	// ─── Remove one key + rewrite file ───
 	if req.RemoveKeyID != "" {
-		newKeys := make([]SubKey, 0, len(meta.Keys))
+		newKeys := make([]model.SubKey, 0, len(meta.Keys))
 		for _, k := range meta.Keys {
 			if k.ID != req.RemoveKeyID {
 				newKeys = append(newKeys, k)
@@ -247,16 +250,16 @@ func (s *SubscriptionService) Update(id string, req UpdateSubscriptionRequest) (
 		} else {
 			meta.Status = "active"
 			if err := s.storage.WriteSubscriptionFile(meta.Name, newKeys); err != nil {
-				return UpdateSubscriptionResult{}, errInternal("Failed to write subscription file")
+				return dto.UpdateSubscriptionResult{}, errInternal("Failed to write subscription file")
 			}
 		}
 		s.sync.Mark()
 		if err := s.storage.UpsertSubMeta(meta); err != nil {
-			return UpdateSubscriptionResult{}, errInternal(err.Error())
+			return dto.UpdateSubscriptionResult{}, errInternal(err.Error())
 		}
 		meta.FileMtime = s.storage.SubscriptionFileMtime(meta.Name)
 		s.enrichSync(&meta)
-		return UpdateSubscriptionResult{Subscription: meta}, nil
+		return dto.UpdateSubscriptionResult{Subscription: meta}, nil
 	}
 
 	// ─── Legacy mode: full key replacement ───
@@ -269,22 +272,22 @@ func (s *SubscriptionService) Update(id string, req UpdateSubscriptionRequest) (
 		} else {
 			meta.Status = "active"
 			if err := s.storage.WriteSubscriptionFile(meta.Name, req.Keys); err != nil {
-				return UpdateSubscriptionResult{}, errInternal("Failed to write subscription file")
+				return dto.UpdateSubscriptionResult{}, errInternal("Failed to write subscription file")
 			}
 		}
 		s.sync.Mark()
 		if err := s.storage.UpsertSubMeta(meta); err != nil {
-			return UpdateSubscriptionResult{}, errInternal(err.Error())
+			return dto.UpdateSubscriptionResult{}, errInternal(err.Error())
 		}
 		meta.FileMtime = s.storage.SubscriptionFileMtime(meta.Name)
 		s.enrichSync(&meta)
-		return UpdateSubscriptionResult{Subscription: meta}, nil
+		return dto.UpdateSubscriptionResult{Subscription: meta}, nil
 	}
 
 	// No-op
 	meta.FileMtime = s.storage.SubscriptionFileMtime(meta.Name)
 	s.enrichSync(&meta)
-	return UpdateSubscriptionResult{Subscription: meta}, nil
+	return dto.UpdateSubscriptionResult{Subscription: meta}, nil
 }
 
 // Delete удаляет подписку (файл + мета).
@@ -308,23 +311,23 @@ func (s *SubscriptionService) Delete(id string) error {
 }
 
 // Test прогоняет все ключи подписки через vlesssubtest.
-func (s *SubscriptionService) Test(id string) (TestSubscriptionResponse, error) {
+func (s *SubscriptionService) Test(id string) (dto.TestSubscriptionResponse, error) {
 	sub, err := s.storage.GetSubscription(id)
 	if err != nil {
-		return TestSubscriptionResponse{}, err
+		return dto.TestSubscriptionResponse{}, err
 	}
 
-	var testKeys []SubKey
+	var testKeys []model.SubKey
 	for _, k := range sub.Keys {
 		if strings.TrimSpace(k.Link) != "" {
 			testKeys = append(testKeys, k)
 		}
 	}
 	if len(testKeys) == 0 {
-		return TestSubscriptionResponse{}, errBadRequest("Subscription has no keys to test")
+		return dto.TestSubscriptionResponse{}, errBadRequest("model.Subscription has no keys to test")
 	}
 
-	var results []TestSingleResponse
+	var results []dto.TestSingleResponse
 	okCount := 0
 
 	for i, key := range testKeys {
@@ -334,7 +337,7 @@ func (s *SubscriptionService) Test(id string) (TestSubscriptionResponse, error) 
 			if errors.Is(err, ErrDaemonUnreachable) {
 				ip = rootCause(err).Error()
 			}
-			results = append(results, TestSingleResponse{KeyIdx: i, Status: "ERROR", IP: ip})
+			results = append(results, dto.TestSingleResponse{KeyIdx: i, Status: "ERROR", IP: ip})
 			continue
 		}
 
@@ -345,30 +348,30 @@ func (s *SubscriptionService) Test(id string) (TestSubscriptionResponse, error) 
 		results = append(results, single)
 	}
 
-	return TestSubscriptionResponse{Total: len(testKeys), OK: okCount, Results: results}, nil
+	return dto.TestSubscriptionResponse{Total: len(testKeys), OK: okCount, Results: results}, nil
 }
 
-// RegenerateAll перегенерирует все подписки с panel-KeySource.
-func (s *SubscriptionService) RegenerateAll() (RegenerateAllResponse, error) {
+// RegenerateAll перегенерирует все подписки с panel-model.KeySource.
+func (s *SubscriptionService) RegenerateAll() (dto.RegenerateAllResponse, error) {
 	subs, err := s.storage.ListSubscriptions()
 	if err != nil {
-		return RegenerateAllResponse{}, errInternal("Failed to load subscriptions")
+		return dto.RegenerateAllResponse{}, errInternal("Failed to load subscriptions")
 	}
 
 	panels, _ := s.storage.LoadPanels()
-	panelMap := make(map[string]Panel, len(panels))
+	panelMap := make(map[string]model.Panel, len(panels))
 	for _, p := range panels {
 		panelMap[p.ID] = p
 	}
 
 	allKS, _ := s.storage.LoadKeySources()
-	ksByID := make(map[string]KeySource, len(allKS))
+	ksByID := make(map[string]model.KeySource, len(allKS))
 	for _, ks := range allKS {
 		ksByID[ks.ID] = ks
 	}
 
-	// Фаза 1: собрать panel-KeySource'ы, сгруппировать по панели.
-	sourcesByPanel := make(map[string]map[string]KeySource)
+	// Фаза 1: собрать panel-model.KeySource'ы, сгруппировать по панели.
+	sourcesByPanel := make(map[string]map[string]model.KeySource)
 	for i := range subs {
 		for _, k := range subs[i].Keys {
 			if k.KeySourceID == nil {
@@ -383,7 +386,7 @@ func (s *SubscriptionService) RegenerateAll() (RegenerateAllResponse, error) {
 			}
 			m := sourcesByPanel[ks.PanelID]
 			if m == nil {
-				m = make(map[string]KeySource)
+				m = make(map[string]model.KeySource)
 				sourcesByPanel[ks.PanelID] = m
 			}
 			m[ks.ID] = ks
@@ -394,7 +397,7 @@ func (s *SubscriptionService) RegenerateAll() (RegenerateAllResponse, error) {
 	resolved := s.resolvePanelKeys(panelMap, sourcesByPanel)
 
 	// Фаза 3: пересобрать каждую подписку.
-	results := []RegenerateSubResult{}
+	results := []dto.RegenerateSubResult{}
 	regenerated := 0
 	skipped := 0
 
@@ -413,11 +416,11 @@ func (s *SubscriptionService) RegenerateAll() (RegenerateAllResponse, error) {
 		}
 		if !hasPanel {
 			skipped++
-			results = append(results, RegenerateSubResult{Name: sub.Name, Regenerated: false, Reason: "нет panel KeySource"})
+			results = append(results, dto.RegenerateSubResult{Name: sub.Name, Regenerated: false, Reason: "нет panel model.KeySource"})
 			continue
 		}
 
-		keys := make([]SubKey, 0, len(sub.Keys))
+		keys := make([]model.SubKey, 0, len(sub.Keys))
 		okCount := 0
 		manualCount := 0
 		skipCount := 0
@@ -433,7 +436,7 @@ func (s *SubscriptionService) RegenerateAll() (RegenerateAllResponse, error) {
 				continue
 			}
 			if ks.Type == "manual" {
-				keys = append(keys, SubKey{ID: k.ID, Link: ks.VlessLink, KeySourceID: k.KeySourceID})
+				keys = append(keys, model.SubKey{ID: k.ID, Link: ks.VlessLink, KeySourceID: k.KeySourceID})
 				manualCount++
 				continue
 			}
@@ -446,7 +449,7 @@ func (s *SubscriptionService) RegenerateAll() (RegenerateAllResponse, error) {
 				skipCount++
 				continue
 			}
-			keys = append(keys, SubKey{ID: k.ID, Link: res.key.Link, KeySourceID: k.KeySourceID})
+			keys = append(keys, model.SubKey{ID: k.ID, Link: res.key.Link, KeySourceID: k.KeySourceID})
 			okCount++
 		}
 
@@ -459,19 +462,19 @@ func (s *SubscriptionService) RegenerateAll() (RegenerateAllResponse, error) {
 			sub.Status = "active"
 			if err := s.storage.WriteSubscriptionFile(sub.Name, keys); err != nil {
 				skipped++
-				results = append(results, RegenerateSubResult{Name: sub.Name, Regenerated: false, Reason: "file write: " + err.Error()})
+				results = append(results, dto.RegenerateSubResult{Name: sub.Name, Regenerated: false, Reason: "file write: " + err.Error()})
 				continue
 			}
 		}
 		s.sync.Mark()
 		if err := s.storage.UpsertSubMeta(*sub); err != nil {
 			skipped++
-			results = append(results, RegenerateSubResult{Name: sub.Name, Regenerated: false, Reason: err.Error()})
+			results = append(results, dto.RegenerateSubResult{Name: sub.Name, Regenerated: false, Reason: err.Error()})
 			continue
 		}
 
 		regenerated++
-		results = append(results, RegenerateSubResult{
+		results = append(results, dto.RegenerateSubResult{
 			Name:        sub.Name,
 			Regenerated: true,
 			Included:    okCount + manualCount,
@@ -479,29 +482,29 @@ func (s *SubscriptionService) RegenerateAll() (RegenerateAllResponse, error) {
 		})
 	}
 
-	return RegenerateAllResponse{Regenerated: regenerated, Skipped: skipped, Results: results}, nil
+	return dto.RegenerateAllResponse{Regenerated: regenerated, Skipped: skipped, Results: results}, nil
 }
 
-// keyResolveResult — результат резолва свежего ключа одного panel-KeySource.
+// keyResolveResult — результат резолва свежего ключа одного panel-model.KeySource.
 type keyResolveResult struct {
-	key VLESSKey
+	key model.VLESSKey
 	err error
 }
 
 // perPanelConcurrency — сколько ссылок на клиентов панели запрашивать одновременно.
 const perPanelConcurrency = 3
 
-// resolvePanelKeys резолвит свежие ключи для panel-KeySource, сгруппировав по панелям.
-func (s *SubscriptionService) resolvePanelKeys(panelMap map[string]Panel, sourcesByPanel map[string]map[string]KeySource) map[string]keyResolveResult {
+// resolvePanelKeys резолвит свежие ключи для panel-model.KeySource, сгруппировав по панелям.
+func (s *SubscriptionService) resolvePanelKeys(panelMap map[string]model.Panel, sourcesByPanel map[string]map[string]model.KeySource) map[string]keyResolveResult {
 	results := make(map[string]keyResolveResult)
-	caches := make(map[string]CachedKey)
+	caches := make(map[string]model.CachedKey)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
 	for pid, sources := range sourcesByPanel {
 		panel := panelMap[pid]
 		wg.Add(1)
-		go func(panel Panel, sources map[string]KeySource) {
+		go func(panel model.Panel, sources map[string]model.KeySource) {
 			defer wg.Done()
 
 			emails := make([]string, 0, len(sources))
@@ -546,7 +549,7 @@ func (s *SubscriptionService) resolvePanelKeys(panelMap map[string]Panel, source
 				mu.Lock()
 				results[id] = res
 				if res.err == nil {
-					caches[id] = CachedKey{Link: res.key.Link, FetchedAt: nowStr()}
+					caches[id] = model.CachedKey{Link: res.key.Link, FetchedAt: nowStr()}
 				}
 				mu.Unlock()
 			}
@@ -560,19 +563,19 @@ func (s *SubscriptionService) resolvePanelKeys(panelMap map[string]Panel, source
 	return results
 }
 
-// resolveKeySources извлекает свежие ключи для списка KeySource ID.
-func (s *SubscriptionService) resolveKeySources(ids []string, report *GenerationReport, includeManual bool) ([]SubKey, error) {
+// resolveKeySources извлекает свежие ключи для списка model.KeySource ID.
+func (s *SubscriptionService) resolveKeySources(ids []string, report *model.GenerationReport, includeManual bool) ([]model.SubKey, error) {
 	panels, _ := s.storage.LoadPanels()
-	panelMap := make(map[string]Panel, len(panels))
+	panelMap := make(map[string]model.Panel, len(panels))
 	for _, p := range panels {
 		panelMap[p.ID] = p
 	}
 
-	keys := []SubKey{}
+	keys := []model.SubKey{}
 	for _, id := range ids {
 		ks, err := s.storage.GetKeySource(id)
 		if err != nil {
-			report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: id, Why: "KeySource не найден"})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: id, Why: "model.KeySource не найден"})
 			continue
 		}
 
@@ -580,17 +583,17 @@ func (s *SubscriptionService) resolveKeySources(ids []string, report *Generation
 
 		if ks.Type == "manual" {
 			if !includeManual {
-				report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: "manual-ключи добавляются отдельно"})
+				report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: label, Why: "manual-ключи добавляются отдельно"})
 				continue
 			}
-			keys = append(keys, SubKey{ID: "k-" + randID(), Link: ks.VlessLink, KeySourceID: strPtr(ks.ID)})
-			report.Items = append(report.Items, GenerationReportItem{Kind: "manual", Label: label})
+			keys = append(keys, model.SubKey{ID: "k-" + randID(), Link: ks.VlessLink, KeySourceID: strPtr(ks.ID)})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "manual", Label: label})
 			continue
 		}
 
 		panel, ok := panelMap[ks.PanelID]
 		if !ok {
-			report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: "панель удалена"})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: label, Why: "панель удалена"})
 			continue
 		}
 
@@ -608,52 +611,52 @@ func (s *SubscriptionService) resolveKeySources(ids []string, report *Generation
 			case errors.Is(err, ErrPanelUnreachable):
 				why = "панель недоступна (таймаут 10 с)"
 			}
-			report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: why})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: label, Why: why})
 			continue
 		}
 
-		ks.CachedKey = &CachedKey{Link: key.Link, FetchedAt: nowStr()}
+		ks.CachedKey = &model.CachedKey{Link: key.Link, FetchedAt: nowStr()}
 		ks.UpdatedAt = nowStr()
 		_ = s.storage.UpdateKeySource(*ks)
 
-		keys = append(keys, SubKey{ID: "k-" + randID(), Link: key.Link, KeySourceID: strPtr(ks.ID)})
-		report.Items = append(report.Items, GenerationReportItem{Kind: "ok", Label: label, Ms: ms})
+		keys = append(keys, model.SubKey{ID: "k-" + randID(), Link: key.Link, KeySourceID: strPtr(ks.ID)})
+		report.Items = append(report.Items, model.GenerationReportItem{Kind: "ok", Label: label, Ms: ms})
 	}
 	return keys, nil
 }
 
 // regenerateKeys обновляет panel-ключи подписки, сохраняя manual.
-func (s *SubscriptionService) regenerateKeys(keys []SubKey, report *GenerationReport) ([]SubKey, error) {
+func (s *SubscriptionService) regenerateKeys(keys []model.SubKey, report *model.GenerationReport) ([]model.SubKey, error) {
 	panels, _ := s.storage.LoadPanels()
-	panelMap := make(map[string]Panel, len(panels))
+	panelMap := make(map[string]model.Panel, len(panels))
 	for _, p := range panels {
 		panelMap[p.ID] = p
 	}
 
-	out := []SubKey{}
+	out := []model.SubKey{}
 	for _, k := range keys {
 		if k.KeySourceID == nil {
 			out = append(out, k)
-			report.Items = append(report.Items, GenerationReportItem{Kind: "manual", Label: "manual (legacy)"})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "manual", Label: "manual (legacy)"})
 			continue
 		}
 
 		ks, err := s.storage.GetKeySource(*k.KeySourceID)
 		if err != nil {
-			report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: *k.KeySourceID, Why: "KeySource не найден — ключ удалён"})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: *k.KeySourceID, Why: "model.KeySource не найден — ключ удалён"})
 			continue
 		}
 		label := ksLabelFor(ks, panelMap)
 
 		if ks.Type == "manual" {
-			out = append(out, SubKey{ID: k.ID, Link: ks.VlessLink, KeySourceID: k.KeySourceID})
-			report.Items = append(report.Items, GenerationReportItem{Kind: "manual", Label: label})
+			out = append(out, model.SubKey{ID: k.ID, Link: ks.VlessLink, KeySourceID: k.KeySourceID})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "manual", Label: label})
 			continue
 		}
 
 		panel, ok := panelMap[ks.PanelID]
 		if !ok {
-			report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: "панель удалена — ключ удалён"})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: label, Why: "панель удалена — ключ удалён"})
 			continue
 		}
 
@@ -670,16 +673,16 @@ func (s *SubscriptionService) regenerateKeys(keys []SubKey, report *GenerationRe
 			case errors.Is(err, ErrPanelUnreachable):
 				why = "панель недоступна (таймаут 10 с)"
 			}
-			report.Items = append(report.Items, GenerationReportItem{Kind: "skip", Label: label, Why: why})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: label, Why: why})
 			continue
 		}
 
-		ks.CachedKey = &CachedKey{Link: key.Link, FetchedAt: nowStr()}
+		ks.CachedKey = &model.CachedKey{Link: key.Link, FetchedAt: nowStr()}
 		ks.UpdatedAt = nowStr()
 		_ = s.storage.UpdateKeySource(*ks)
 
-		out = append(out, SubKey{ID: k.ID, Link: key.Link, KeySourceID: k.KeySourceID})
-		report.Items = append(report.Items, GenerationReportItem{Kind: "ok", Label: label, Ms: ms})
+		out = append(out, model.SubKey{ID: k.ID, Link: key.Link, KeySourceID: k.KeySourceID})
+		report.Items = append(report.Items, model.GenerationReportItem{Kind: "ok", Label: label, Ms: ms})
 	}
 	return out, nil
 }

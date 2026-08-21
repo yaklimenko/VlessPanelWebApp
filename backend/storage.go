@@ -8,12 +8,15 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"vlesspanel/dto"
+	"vlesspanel/model"
 )
 
 // Storage handles file-based data persistence.
 // Layout:
 //   - panels.json        — list of 3X-UI panels
-//   - key-sources.json   — list of KeySource records
+//   - key-sources.json   — list of model.KeySource records
 //   - subscriptions.json — subscription metadata (status, keySourceId refs, updatedAt)
 //   - tokens.json        — issued API tokens (sha256 hashes only)
 //   - aggregatorDir      — generated subscription files configs-{name}.txt
@@ -33,7 +36,7 @@ type Storage struct {
 func NewStorage(panelsPath, aggregatorDir, dataDir string) *Storage {
 	// Ensure panels.json exists
 	if _, err := os.Stat(panelsPath); os.IsNotExist(err) {
-		initial := []Panel{}
+		initial := []model.Panel{}
 		data, _ := json.MarshalIndent(initial, "", "  ")
 		os.WriteFile(panelsPath, data, 0644)
 	}
@@ -47,19 +50,19 @@ func NewStorage(panelsPath, aggregatorDir, dataDir string) *Storage {
 
 	// Ensure key-sources.json exists
 	if _, err := os.Stat(keySourcesPath); os.IsNotExist(err) {
-		initial := []KeySource{}
+		initial := []model.KeySource{}
 		data, _ := json.MarshalIndent(initial, "", "  ")
 		os.WriteFile(keySourcesPath, data, 0644)
 	}
 	// Ensure subscriptions.json exists
 	if _, err := os.Stat(subsMetaPath); os.IsNotExist(err) {
-		initial := []Subscription{}
+		initial := []model.Subscription{}
 		data, _ := json.MarshalIndent(initial, "", "  ")
 		os.WriteFile(subsMetaPath, data, 0644)
 	}
 	// Ensure tokens.json exists
 	if _, err := os.Stat(tokensPath); os.IsNotExist(err) {
-		initial := []APIToken{}
+		initial := []model.APIToken{}
 		data, _ := json.MarshalIndent(initial, "", "  ")
 		os.WriteFile(tokensPath, data, 0644)
 	}
@@ -77,27 +80,27 @@ func NewStorage(panelsPath, aggregatorDir, dataDir string) *Storage {
 
 // GetPanel returns a single panel by ID. Returns ErrPanelNotFound when absent.
 // Loads the whole file under RLock (panels list is small and unindexed).
-func (s *Storage) GetPanel(id string) (Panel, error) {
+func (s *Storage) GetPanel(id string) (model.Panel, error) {
 	panels, err := s.LoadPanels()
 	if err != nil {
-		return Panel{}, err
+		return model.Panel{}, err
 	}
 	for i := range panels {
 		if panels[i].ID == id {
 			return panels[i], nil
 		}
 	}
-	return Panel{}, fmt.Errorf("%w: %s", ErrPanelNotFound, id)
+	return model.Panel{}, fmt.Errorf("%w: %s", ErrPanelNotFound, id)
 }
 
 // loadPanelsLocked reads panels.json. Caller must hold at least RLock.
-func (s *Storage) loadPanelsLocked() ([]Panel, error) {
+func (s *Storage) loadPanelsLocked() ([]model.Panel, error) {
 	data, err := os.ReadFile(s.panelsPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading panels file: %w", err)
 	}
 
-	var panels []Panel
+	var panels []model.Panel
 	if err := json.Unmarshal(data, &panels); err != nil {
 		return nil, fmt.Errorf("parsing panels file: %w", err)
 	}
@@ -106,7 +109,7 @@ func (s *Storage) loadPanelsLocked() ([]Panel, error) {
 }
 
 // savePanelsLocked writes panels.json. Caller must hold Lock.
-func (s *Storage) savePanelsLocked(panels []Panel) error {
+func (s *Storage) savePanelsLocked(panels []model.Panel) error {
 	data, err := json.MarshalIndent(panels, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling panels: %w", err)
@@ -120,7 +123,7 @@ func (s *Storage) savePanelsLocked(panels []Panel) error {
 }
 
 // LoadPanels reads all panels from panels.json
-func (s *Storage) LoadPanels() ([]Panel, error) {
+func (s *Storage) LoadPanels() ([]model.Panel, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.loadPanelsLocked()
@@ -128,13 +131,13 @@ func (s *Storage) LoadPanels() ([]Panel, error) {
 
 // AddPanel adds a new panel and returns it with an assigned ID. The whole
 // read-modify-write (load → unique-id → append → save) is atomic under one lock.
-func (s *Storage) AddPanel(req CreatePanelRequest) (Panel, error) {
+func (s *Storage) AddPanel(req dto.CreatePanelRequest) (model.Panel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	panels, err := s.loadPanelsLocked()
 	if err != nil {
-		return Panel{}, err
+		return model.Panel{}, err
 	}
 
 	// Generate ID from name, make unique.
@@ -154,7 +157,7 @@ func (s *Storage) AddPanel(req CreatePanelRequest) (Panel, error) {
 		id = fmt.Sprintf("%s-%d", baseID, i)
 	}
 
-	panel := Panel{
+	panel := model.Panel{
 		ID:                 id,
 		Name:               req.Name,
 		URL:                req.URL,
@@ -165,7 +168,7 @@ func (s *Storage) AddPanel(req CreatePanelRequest) (Panel, error) {
 
 	panels = append(panels, panel)
 	if err := s.savePanelsLocked(panels); err != nil {
-		return Panel{}, err
+		return model.Panel{}, err
 	}
 
 	return panel, nil
@@ -200,13 +203,13 @@ func (s *Storage) DeletePanel(id string) error {
 // --- Key Sources ---
 
 // loadKeySourcesLocked reads key-sources.json. Caller must hold at least RLock.
-func (s *Storage) loadKeySourcesLocked() ([]KeySource, error) {
+func (s *Storage) loadKeySourcesLocked() ([]model.KeySource, error) {
 	data, err := os.ReadFile(s.keySourcesPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading key sources file: %w", err)
 	}
 
-	var sources []KeySource
+	var sources []model.KeySource
 	if err := json.Unmarshal(data, &sources); err != nil {
 		return nil, fmt.Errorf("parsing key sources file: %w", err)
 	}
@@ -215,7 +218,7 @@ func (s *Storage) loadKeySourcesLocked() ([]KeySource, error) {
 }
 
 // saveKeySourcesLocked writes key-sources.json. Caller must hold Lock.
-func (s *Storage) saveKeySourcesLocked(sources []KeySource) error {
+func (s *Storage) saveKeySourcesLocked(sources []model.KeySource) error {
 	data, err := json.MarshalIndent(sources, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling key sources: %w", err)
@@ -229,14 +232,14 @@ func (s *Storage) saveKeySourcesLocked(sources []KeySource) error {
 }
 
 // LoadKeySources reads all KeySources from key-sources.json
-func (s *Storage) LoadKeySources() ([]KeySource, error) {
+func (s *Storage) LoadKeySources() ([]model.KeySource, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.loadKeySourcesLocked()
 }
 
-// GetKeySource returns a KeySource by ID.
-func (s *Storage) GetKeySource(id string) (*KeySource, error) {
+// GetKeySource returns a model.KeySource by ID.
+func (s *Storage) GetKeySource(id string) (*model.KeySource, error) {
 	sources, err := s.LoadKeySources()
 	if err != nil {
 		return nil, err
@@ -250,11 +253,11 @@ func (s *Storage) GetKeySource(id string) (*KeySource, error) {
 	return nil, fmt.Errorf("%w: %s", ErrKeySourceNotFound, id)
 }
 
-// AddKeySource appends a new KeySource unless a duplicate of the same type
+// AddKeySource appends a new model.KeySource unless a duplicate of the same type
 // already exists (panel: same panel/email/inbound triplet; manual: same link).
 // The dedup check and append are atomic. Returns (existing, true) when a
 // duplicate is found, otherwise (new, false).
-func (s *Storage) AddKeySource(ks KeySource) (*KeySource, bool, error) {
+func (s *Storage) AddKeySource(ks model.KeySource) (*model.KeySource, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -286,8 +289,8 @@ func (s *Storage) AddKeySource(ks KeySource) (*KeySource, bool, error) {
 	return &ks, false, nil
 }
 
-// UpdateKeySource replaces a KeySource by ID (atomic read-modify-write).
-func (s *Storage) UpdateKeySource(updated KeySource) error {
+// UpdateKeySource replaces a model.KeySource by ID (atomic read-modify-write).
+func (s *Storage) UpdateKeySource(updated model.KeySource) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -309,11 +312,11 @@ func (s *Storage) UpdateKeySource(updated KeySource) error {
 	return s.saveKeySourcesLocked(sources)
 }
 
-// UpdateKeySourceCaches обновляет CachedKey для нескольких KeySource в одном
+// UpdateKeySourceCaches обновляет model.CachedKey для нескольких model.KeySource в одном
 // атомарном read-modify-write (одна запись файла). Несуществующие ID
 // игнорируются. Используется при массовой регенерации, чтобы не перезаписывать
 // key-sources.json по одному на каждый ключ.
-func (s *Storage) UpdateKeySourceCaches(caches map[string]CachedKey) error {
+func (s *Storage) UpdateKeySourceCaches(caches map[string]model.CachedKey) error {
 	if len(caches) == 0 {
 		return nil
 	}
@@ -333,7 +336,7 @@ func (s *Storage) UpdateKeySourceCaches(caches map[string]CachedKey) error {
 	return s.saveKeySourcesLocked(sources)
 }
 
-// DeleteKeySource removes a KeySource by ID (atomic read-modify-write).
+// DeleteKeySource removes a model.KeySource by ID (atomic read-modify-write).
 func (s *Storage) DeleteKeySource(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -356,22 +359,22 @@ func (s *Storage) DeleteKeySource(id string) error {
 	return s.saveKeySourcesLocked(sources)
 }
 
-// --- Subscription metadata ---
+// --- model.Subscription metadata ---
 
 // LoadSubscriptionsMeta reads subscription metadata (id/name/status/keys/updatedAt).
-func (s *Storage) LoadSubscriptionsMeta() ([]Subscription, error) {
+func (s *Storage) LoadSubscriptionsMeta() ([]model.Subscription, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	data, err := os.ReadFile(s.subsMetaPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []Subscription{}, nil
+			return []model.Subscription{}, nil
 		}
 		return nil, fmt.Errorf("reading subscriptions meta: %w", err)
 	}
 
-	var subs []Subscription
+	var subs []model.Subscription
 	if err := json.Unmarshal(data, &subs); err != nil {
 		return nil, fmt.Errorf("parsing subscriptions meta: %w", err)
 	}
@@ -380,7 +383,7 @@ func (s *Storage) LoadSubscriptionsMeta() ([]Subscription, error) {
 }
 
 // saveSubsMetaLocked writes subscriptions.json. Caller must hold Lock.
-func (s *Storage) saveSubsMetaLocked(subs []Subscription) error {
+func (s *Storage) saveSubsMetaLocked(subs []model.Subscription) error {
 	data, err := json.MarshalIndent(subs, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling subscriptions meta: %w", err)
@@ -392,7 +395,7 @@ func (s *Storage) saveSubsMetaLocked(subs []Subscription) error {
 }
 
 // GetSubMeta returns subscription metadata by name.
-func (s *Storage) GetSubMeta(name string) (*Subscription, bool) {
+func (s *Storage) GetSubMeta(name string) (*model.Subscription, bool) {
 	subs, err := s.LoadSubscriptionsMeta()
 	if err != nil {
 		return nil, false
@@ -407,7 +410,7 @@ func (s *Storage) GetSubMeta(name string) (*Subscription, bool) {
 }
 
 // UpsertSubMeta inserts or replaces subscription metadata by name (atomic).
-func (s *Storage) UpsertSubMeta(sub Subscription) error {
+func (s *Storage) UpsertSubMeta(sub model.Subscription) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -455,12 +458,12 @@ func (s *Storage) DeleteSubMeta(name string) error {
 // --- API tokens ---
 
 // loadTokensLocked reads tokens.json. Caller must hold at least RLock.
-func (s *Storage) loadTokensLocked() ([]APIToken, error) {
+func (s *Storage) loadTokensLocked() ([]model.APIToken, error) {
 	data, err := os.ReadFile(s.tokensPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading tokens file: %w", err)
 	}
-	var tokens []APIToken
+	var tokens []model.APIToken
 	if err := json.Unmarshal(data, &tokens); err != nil {
 		return nil, fmt.Errorf("parsing tokens file: %w", err)
 	}
@@ -468,7 +471,7 @@ func (s *Storage) loadTokensLocked() ([]APIToken, error) {
 }
 
 // saveTokensLocked writes tokens.json. Caller must hold Lock.
-func (s *Storage) saveTokensLocked(tokens []APIToken) error {
+func (s *Storage) saveTokensLocked(tokens []model.APIToken) error {
 	data, err := json.MarshalIndent(tokens, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling tokens: %w", err)
@@ -480,14 +483,14 @@ func (s *Storage) saveTokensLocked(tokens []APIToken) error {
 }
 
 // LoadTokens reads all issued API tokens.
-func (s *Storage) LoadTokens() ([]APIToken, error) {
+func (s *Storage) LoadTokens() ([]model.APIToken, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.loadTokensLocked()
 }
 
 // AddToken appends a new API token (atomic).
-func (s *Storage) AddToken(tok APIToken) error {
+func (s *Storage) AddToken(tok model.APIToken) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -501,28 +504,28 @@ func (s *Storage) AddToken(tok APIToken) error {
 
 // DeleteToken removes an API token by ID and returns it (atomic). The caller
 // uses the returned TokenHash to drop it from the in-memory auth cache.
-func (s *Storage) DeleteToken(id string) (APIToken, error) {
+func (s *Storage) DeleteToken(id string) (model.APIToken, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	tokens, err := s.loadTokensLocked()
 	if err != nil {
-		return APIToken{}, err
+		return model.APIToken{}, err
 	}
 	for i := range tokens {
 		if tokens[i].ID == id {
 			tok := tokens[i]
 			tokens = append(tokens[:i], tokens[i+1:]...)
 			if err := s.saveTokensLocked(tokens); err != nil {
-				return APIToken{}, err
+				return model.APIToken{}, err
 			}
 			return tok, nil
 		}
 	}
-	return APIToken{}, fmt.Errorf("%w: %s", ErrTokenNotFound, id)
+	return model.APIToken{}, fmt.Errorf("%w: %s", ErrTokenNotFound, id)
 }
 
-// --- Subscription files ---
+// --- model.Subscription files ---
 
 // subscriptionFile returns the path for a subscription file. The name is
 // validated so it cannot escape aggregatorDir (defense in depth: read/delete
@@ -548,7 +551,7 @@ func (s *Storage) SubscriptionFileExists(name string) bool {
 }
 
 // WriteSubscriptionFile writes the subscription file from key links.
-func (s *Storage) WriteSubscriptionFile(name string, keys []SubKey) error {
+func (s *Storage) WriteSubscriptionFile(name string, keys []model.SubKey) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -619,14 +622,14 @@ func (s *Storage) SubscriptionFileMtime(name string) string {
 	return info.ModTime().UTC().Format("2006-01-02T15:04:05Z07:00")
 }
 
-// ListSubscriptions returns all subscriptions, merging metadata (KeySource refs,
+// ListSubscriptions returns all subscriptions, merging metadata (model.KeySource refs,
 // status) with the actual files. Legacy files without metadata are reported with
 // manual keys (keySourceId=null) and status active.
-func (s *Storage) ListSubscriptions() ([]Subscription, error) {
+func (s *Storage) ListSubscriptions() ([]model.Subscription, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	metas := map[string]Subscription{}
+	metas := map[string]model.Subscription{}
 	metaList, err := s.loadSubsMetaLocked()
 	if err != nil {
 		return nil, err
@@ -640,7 +643,7 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 		return nil, fmt.Errorf("reading aggregator dir: %w", err)
 	}
 
-	var subs []Subscription
+	var subs []model.Subscription
 	seen := map[string]bool{}
 
 	for _, entry := range entries {
@@ -665,7 +668,7 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 
 		if meta, ok := metas[clientName]; ok {
 			// Pair meta keys with file lines by index (file is truth for links).
-			keys := make([]SubKey, 0, len(lines)+2)
+			keys := make([]model.SubKey, 0, len(lines)+2)
 			for i, line := range lines {
 				line = strings.TrimSpace(line)
 				if line == "" {
@@ -676,10 +679,10 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 					k.Link = line
 					keys = append(keys, k)
 				} else {
-					keys = append(keys, SubKey{ID: fmt.Sprintf("k-%d", i+1), Link: line})
+					keys = append(keys, model.SubKey{ID: fmt.Sprintf("k-%d", i+1), Link: line})
 				}
 			}
-			// Meta keys beyond the file lines (e.g. KeySource added but not yet
+			// Meta keys beyond the file lines (e.g. model.KeySource added but not yet
 			// generated) are kept as-is with their stored (possibly empty) link.
 			if len(meta.Keys) > len(lines) {
 				for i := len(lines); i < len(meta.Keys); i++ {
@@ -702,20 +705,20 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 			subs = append(subs, sub)
 		} else {
 			// Legacy subscription: no metadata, all keys manual.
-			keys := make([]SubKey, 0, len(lines))
+			keys := make([]model.SubKey, 0, len(lines))
 			for i, line := range lines {
 				line = strings.TrimSpace(line)
 				if line == "" {
 					continue
 				}
-				keys = append(keys, SubKey{ID: fmt.Sprintf("k-%d", i+1), Link: line})
+				keys = append(keys, model.SubKey{ID: fmt.Sprintf("k-%d", i+1), Link: line})
 			}
 			info, _ := entry.Info()
 			mtime := ""
 			if info != nil {
 				mtime = info.ModTime().UTC().Format("2006-01-02T15:04:05Z07:00")
 			}
-			subs = append(subs, Subscription{
+			subs = append(subs, model.Subscription{
 				ID:        clientName,
 				Name:      clientName,
 				Status:    "active",
@@ -752,24 +755,24 @@ func (s *Storage) ListSubscriptions() ([]Subscription, error) {
 }
 
 // normalizeSubKeys ensures Keys is never nil so JSON serializes as [] not null.
-func normalizeSubKeys(subs []Subscription) {
+func normalizeSubKeys(subs []model.Subscription) {
 	for i := range subs {
 		if subs[i].Keys == nil {
-			subs[i].Keys = []SubKey{}
+			subs[i].Keys = []model.SubKey{}
 		}
 	}
 }
 
 // loadSubsMetaLocked reads subscriptions.json (caller must hold at least RLock).
-func (s *Storage) loadSubsMetaLocked() ([]Subscription, error) {
+func (s *Storage) loadSubsMetaLocked() ([]model.Subscription, error) {
 	data, err := os.ReadFile(s.subsMetaPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []Subscription{}, nil
+			return []model.Subscription{}, nil
 		}
 		return nil, fmt.Errorf("reading subscriptions meta: %w", err)
 	}
-	var subs []Subscription
+	var subs []model.Subscription
 	if err := json.Unmarshal(data, &subs); err != nil {
 		return nil, fmt.Errorf("parsing subscriptions meta: %w", err)
 	}
@@ -778,7 +781,7 @@ func (s *Storage) loadSubsMetaLocked() ([]Subscription, error) {
 }
 
 // GetSubscription returns a single subscription by name
-func (s *Storage) GetSubscription(name string) (*Subscription, error) {
+func (s *Storage) GetSubscription(name string) (*model.Subscription, error) {
 	subs, err := s.ListSubscriptions()
 	if err != nil {
 		return nil, err

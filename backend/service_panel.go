@@ -1,6 +1,11 @@
 package main
 
-import "time"
+import (
+	"time"
+
+	"vlesspanel/dto"
+	"vlesspanel/model"
+)
 
 // PanelService — use cases для панелей и клиентов/инбаундов 3X-UI.
 type PanelService struct {
@@ -12,7 +17,7 @@ func NewPanelService(storage Repository, panelAPI PanelClient) *PanelService {
 	return &PanelService{storage: storage, panelAPI: panelAPI}
 }
 
-func (s *PanelService) List() ([]Panel, error) {
+func (s *PanelService) List() ([]model.Panel, error) {
 	panels, err := s.storage.LoadPanels()
 	if err != nil {
 		return nil, errInternal("Failed to load panels")
@@ -20,13 +25,13 @@ func (s *PanelService) List() ([]Panel, error) {
 	return panels, nil
 }
 
-func (s *PanelService) Create(req CreatePanelRequest) (Panel, error) {
+func (s *PanelService) Create(req dto.CreatePanelRequest) (model.Panel, error) {
 	if req.Name == "" || req.URL == "" || req.Token == "" {
-		return Panel{}, errBadRequest("name, url, and token are required")
+		return model.Panel{}, errBadRequest("name, url, and token are required")
 	}
 	panel, err := s.storage.AddPanel(req)
 	if err != nil {
-		return Panel{}, errInternal("Failed to create panel")
+		return model.Panel{}, errInternal("Failed to create panel")
 	}
 	return panel, nil
 }
@@ -35,7 +40,7 @@ func (s *PanelService) Delete(id string) error {
 	return s.storage.DeletePanel(id)
 }
 
-func (s *PanelService) ListClients(panelID string) ([]Client, error) {
+func (s *PanelService) ListClients(panelID string) ([]model.Client, error) {
 	panel, err := s.storage.GetPanel(panelID)
 	if err != nil {
 		return nil, err
@@ -47,21 +52,21 @@ func (s *PanelService) ListClients(panelID string) ([]Client, error) {
 	return clients, nil
 }
 
-func (s *PanelService) CreateClient(panelID string, req CreateClientRequest) (StatusResponse, error) {
+func (s *PanelService) CreateClient(panelID string, req dto.CreateClientRequest) (dto.StatusResponse, error) {
 	if req.Email == "" || req.InboundID == 0 {
-		return StatusResponse{}, errBadRequest("email and inboundId are required")
+		return dto.StatusResponse{}, errBadRequest("email and inboundId are required")
 	}
 	panel, err := s.storage.GetPanel(panelID)
 	if err != nil {
-		return StatusResponse{}, err
+		return dto.StatusResponse{}, err
 	}
 	if err := s.panelAPI.CreateClient(panel, req.InboundID, req.Email, req.ExpiryDate); err != nil {
-		return StatusResponse{}, errInternal("Failed to create client: %v", err)
+		return dto.StatusResponse{}, errInternal("Failed to create client: %v", err)
 	}
-	return StatusResponse{Status: "created", Email: req.Email}, nil
+	return dto.StatusResponse{Status: "created", Email: req.Email}, nil
 }
 
-func (s *PanelService) GetClientKeys(panelID, email string) ([]VLESSKey, error) {
+func (s *PanelService) GetClientKeys(panelID, email string) ([]model.VLESSKey, error) {
 	panel, err := s.storage.GetPanel(panelID)
 	if err != nil {
 		return nil, err
@@ -73,7 +78,7 @@ func (s *PanelService) GetClientKeys(panelID, email string) ([]VLESSKey, error) 
 	return keys, nil
 }
 
-func (s *PanelService) ListInbounds(panelID string) ([]SimpleInbound, error) {
+func (s *PanelService) ListInbounds(panelID string) ([]dto.SimpleInbound, error) {
 	panel, err := s.storage.GetPanel(panelID)
 	if err != nil {
 		return nil, err
@@ -82,9 +87,9 @@ func (s *PanelService) ListInbounds(panelID string) ([]SimpleInbound, error) {
 	if err != nil {
 		return nil, errInternal("Failed to list inbounds: %v", err)
 	}
-	simple := make([]SimpleInbound, 0, len(inbounds))
+	simple := make([]dto.SimpleInbound, 0, len(inbounds))
 	for _, ib := range inbounds {
-		simple = append(simple, SimpleInbound{
+		simple = append(simple, dto.SimpleInbound{
 			ID:       ib.ID,
 			Remark:   ib.Remark,
 			Port:     ib.Port,
@@ -95,51 +100,51 @@ func (s *PanelService) ListInbounds(panelID string) ([]SimpleInbound, error) {
 	return simple, nil
 }
 
-func (s *PanelService) Attach(panelID, email string, inboundID int) (StatusResponse, error) {
+func (s *PanelService) Attach(panelID, email string, inboundID int) (dto.StatusResponse, error) {
 	if inboundID == 0 {
-		return StatusResponse{}, errBadRequest("inboundId is required")
+		return dto.StatusResponse{}, errBadRequest("inboundId is required")
 	}
 	panel, err := s.storage.GetPanel(panelID)
 	if err != nil {
-		return StatusResponse{}, err
+		return dto.StatusResponse{}, err
 	}
 	if err := s.panelAPI.AttachClient(panel, email, inboundID); err != nil {
-		return StatusResponse{}, errInternal("Failed to attach inbound: %v", err)
+		return dto.StatusResponse{}, errInternal("Failed to attach inbound: %v", err)
 	}
-	return StatusResponse{Status: "attached", Email: email}, nil
+	return dto.StatusResponse{Status: "attached", Email: email}, nil
 }
 
-func (s *PanelService) Detach(panelID, email string, inboundID int) (StatusResponse, error) {
+func (s *PanelService) Detach(panelID, email string, inboundID int) (dto.StatusResponse, error) {
 	if inboundID == 0 {
-		return StatusResponse{}, errBadRequest("inboundId is required")
+		return dto.StatusResponse{}, errBadRequest("inboundId is required")
 	}
 	panel, err := s.storage.GetPanel(panelID)
 	if err != nil {
-		return StatusResponse{}, err
+		return dto.StatusResponse{}, err
 	}
 	if err := s.panelAPI.DetachClient(panel, email, inboundID); err != nil {
-		return StatusResponse{}, errInternal("Failed to detach inbound: %v", err)
+		return dto.StatusResponse{}, errInternal("Failed to detach inbound: %v", err)
 	}
-	return StatusResponse{Status: "detached", Email: email}, nil
+	return dto.StatusResponse{Status: "detached", Email: email}, nil
 }
 
-func (s *PanelService) UpdateClient(panelID, email string, req UpdateClientRequest) (StatusResponse, error) {
+func (s *PanelService) UpdateClient(panelID, email string, req dto.UpdateClientRequest) (dto.StatusResponse, error) {
 	panel, err := s.storage.GetPanel(panelID)
 	if err != nil {
-		return StatusResponse{}, err
+		return dto.StatusResponse{}, err
 	}
 
 	var expiryTime int64
 	if req.ExpiryDate != "" {
 		t, err := time.Parse("2006-01-02", req.ExpiryDate)
 		if err != nil {
-			return StatusResponse{}, errBadRequest("Invalid expiryDate format (expected YYYY-MM-DD)")
+			return dto.StatusResponse{}, errBadRequest("Invalid expiryDate format (expected YYYY-MM-DD)")
 		}
 		expiryTime = t.Unix() * 1000
 	}
 
 	if err := s.panelAPI.UpdateClient(panel, email, expiryTime); err != nil {
-		return StatusResponse{}, errInternal("Failed to update client: %v", err)
+		return dto.StatusResponse{}, errInternal("Failed to update client: %v", err)
 	}
-	return StatusResponse{Status: "updated", Email: email}, nil
+	return dto.StatusResponse{Status: "updated", Email: email}, nil
 }

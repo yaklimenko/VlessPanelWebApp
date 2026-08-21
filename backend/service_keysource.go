@@ -6,9 +6,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"vlesspanel/dto"
+	"vlesspanel/model"
+	"vlesspanel/xui"
 )
 
-// KeySourceService — use cases для KeySource (источников ключей).
+// KeySourceService — use cases для model.KeySource (источников ключей).
 type KeySourceService struct {
 	storage  Repository
 	panelAPI PanelClient
@@ -22,20 +26,20 @@ func NewKeySourceService(storage Repository, panelAPI PanelClient, sync *SyncSta
 
 // panelSnapshot caches clients of one panel for a request batch.
 type panelSnapshot struct {
-	clients  []Client
-	inbounds []XUIInbound
+	clients  []model.Client
+	inbounds []xui.XUIInbound
 	err      error
 }
 
 // loadPanelSnapshot fetches one panel's clients+inbounds in parallel.
-func (s *KeySourceService) loadPanelSnapshot(panel Panel) *panelSnapshot {
+func (s *KeySourceService) loadPanelSnapshot(panel model.Panel) *panelSnapshot {
 	clients, inbounds, err := s.panelAPI.ListClientsAndInbounds(panel)
 	return &panelSnapshot{clients: clients, inbounds: inbounds, err: err}
 }
 
 // loadSnapshots fetches clients+inbounds for all panels referenced by the
 // given KeySources in parallel (one goroutine per panel).
-func (s *KeySourceService) loadSnapshots(panelMap map[string]Panel, sources []KeySource) map[string]*panelSnapshot {
+func (s *KeySourceService) loadSnapshots(panelMap map[string]model.Panel, sources []model.KeySource) map[string]*panelSnapshot {
 	needed := make(map[string]bool)
 	for _, ks := range sources {
 		if ks.Type == "panel" {
@@ -51,7 +55,7 @@ func (s *KeySourceService) loadSnapshots(panelMap map[string]Panel, sources []Ke
 	for pid := range needed {
 		panel := panelMap[pid]
 		wg.Add(1)
-		go func(p Panel) {
+		go func(p model.Panel) {
 			defer wg.Done()
 			snap := s.loadPanelSnapshot(p)
 			mu.Lock()
@@ -63,15 +67,15 @@ func (s *KeySourceService) loadSnapshots(panelMap map[string]Panel, sources []Ke
 	return snapshot
 }
 
-// List возвращает все KeySource с derived-статусами.
-func (s *KeySourceService) List() ([]KeySource, error) {
+// List возвращает все model.KeySource с derived-статусами.
+func (s *KeySourceService) List() ([]model.KeySource, error) {
 	sources, err := s.storage.LoadKeySources()
 	if err != nil {
 		return nil, errInternal("Failed to load key sources")
 	}
 
 	panels, _ := s.storage.LoadPanels()
-	panelMap := make(map[string]Panel, len(panels))
+	panelMap := make(map[string]model.Panel, len(panels))
 	for _, p := range panels {
 		panelMap[p.ID] = p
 	}
@@ -88,7 +92,7 @@ func (s *KeySourceService) List() ([]KeySource, error) {
 	}
 
 	snapshot := s.loadSnapshots(panelMap, sources)
-	resp := make([]KeySource, 0, len(sources))
+	resp := make([]model.KeySource, 0, len(sources))
 	for i := range sources {
 		ks := sources[i]
 		s.enrichKeySource(&ks, panelMap, snapshot, usage)
@@ -97,14 +101,14 @@ func (s *KeySourceService) List() ([]KeySource, error) {
 	return resp, nil
 }
 
-// Get возвращает один KeySource с derived-статусом.
-func (s *KeySourceService) Get(id string) (*KeySource, error) {
+// Get возвращает один model.KeySource с derived-статусом.
+func (s *KeySourceService) Get(id string) (*model.KeySource, error) {
 	ks, err := s.storage.GetKeySource(id)
 	if err != nil {
 		return nil, err
 	}
 	panels, _ := s.storage.LoadPanels()
-	panelMap := make(map[string]Panel, len(panels))
+	panelMap := make(map[string]model.Panel, len(panels))
 	for _, p := range panels {
 		panelMap[p.ID] = p
 	}
@@ -112,25 +116,25 @@ func (s *KeySourceService) Get(id string) (*KeySource, error) {
 	return ks, nil
 }
 
-// Create создаёт KeySource (panel triplet или manual vless link) с дедупом.
-func (s *KeySourceService) Create(req CreateKeySourceRequest) (CreateKeySourceResponse, error) {
+// Create создаёт model.KeySource (panel triplet или manual vless link) с дедупом.
+func (s *KeySourceService) Create(req dto.CreateKeySourceRequest) (dto.CreateKeySourceResponse, error) {
 	req.Type = strings.ToLower(strings.TrimSpace(req.Type))
 	switch req.Type {
 	case "panel":
 		if req.PanelID == "" || req.ClientEmail == "" || req.InboundID == 0 {
-			return CreateKeySourceResponse{}, errBadRequest("panelId, clientEmail и inboundId обязательны для type=panel")
+			return dto.CreateKeySourceResponse{}, errBadRequest("panelId, clientEmail и inboundId обязательны для type=panel")
 		}
 	case "manual":
 		req.VlessLink = strings.TrimSpace(req.VlessLink)
 		if !strings.HasPrefix(req.VlessLink, "vless://") {
-			return CreateKeySourceResponse{}, errBadRequest("vlessLink должен начинаться с vless://")
+			return dto.CreateKeySourceResponse{}, errBadRequest("vlessLink должен начинаться с vless://")
 		}
 	default:
-		return CreateKeySourceResponse{}, errBadRequest("type должен быть panel или manual")
+		return dto.CreateKeySourceResponse{}, errBadRequest("type должен быть panel или manual")
 	}
 
 	now := nowStr()
-	ks := KeySource{
+	ks := model.KeySource{
 		ID:          "ks-" + randID(),
 		Type:        req.Type,
 		PanelID:     req.PanelID,
@@ -147,31 +151,31 @@ func (s *KeySourceService) Create(req CreateKeySourceRequest) (CreateKeySourceRe
 
 	existing, deduped, err := s.storage.AddKeySource(ks)
 	if err != nil {
-		return CreateKeySourceResponse{}, errInternal("Failed to save key source")
+		return dto.CreateKeySourceResponse{}, errInternal("Failed to save key source")
 	}
 	if deduped {
-		return CreateKeySourceResponse{KeySource: existing, Deduped: true}, nil
+		return dto.CreateKeySourceResponse{KeySource: existing, Deduped: true}, nil
 	}
-	return CreateKeySourceResponse{KeySource: &ks, Deduped: false}, nil
+	return dto.CreateKeySourceResponse{KeySource: &ks, Deduped: false}, nil
 }
 
-// Delete удаляет KeySource и каскадно чистит ссылки из подписок.
-func (s *KeySourceService) Delete(id string) (DeleteKeySourceResponse, error) {
+// Delete удаляет model.KeySource и каскадно чистит ссылки из подписок.
+func (s *KeySourceService) Delete(id string) (dto.DeleteKeySourceResponse, error) {
 	ks, err := s.storage.GetKeySource(id)
 	if err != nil {
-		return DeleteKeySourceResponse{}, err
+		return dto.DeleteKeySourceResponse{}, err
 	}
 
 	subs, err := s.storage.ListSubscriptions()
 	if err != nil {
-		return DeleteKeySourceResponse{}, errInternal("Failed to load subscriptions")
+		return dto.DeleteKeySourceResponse{}, errInternal("Failed to load subscriptions")
 	}
 
 	affected := []string{}
 	for i := range subs {
 		sub := subs[i]
 		removed := false
-		newKeys := make([]SubKey, 0, len(sub.Keys))
+		newKeys := make([]model.SubKey, 0, len(sub.Keys))
 		for _, k := range sub.Keys {
 			if k.KeySourceID != nil && *k.KeySourceID == id {
 				removed = true
@@ -204,14 +208,14 @@ func (s *KeySourceService) Delete(id string) (DeleteKeySourceResponse, error) {
 	}
 
 	if err := s.storage.DeleteKeySource(id); err != nil {
-		return DeleteKeySourceResponse{}, errInternal(err.Error())
+		return dto.DeleteKeySourceResponse{}, errInternal(err.Error())
 	}
 
 	label := ks.Label
 	if label == "" {
 		label = id
 	}
-	return DeleteKeySourceResponse{
+	return dto.DeleteKeySourceResponse{
 		Status:              "deleted",
 		Label:               label,
 		UsedInSubscriptions: len(affected),
@@ -220,44 +224,44 @@ func (s *KeySourceService) Delete(id string) (DeleteKeySourceResponse, error) {
 }
 
 // GetKey возвращает свежий ключ (для manual — хранимый link), обновляя кэш.
-func (s *KeySourceService) GetKey(id string) (KeySourceKeyResponse, error) {
+func (s *KeySourceService) GetKey(id string) (dto.KeySourceKeyResponse, error) {
 	ks, err := s.storage.GetKeySource(id)
 	if err != nil {
-		return KeySourceKeyResponse{}, err
+		return dto.KeySourceKeyResponse{}, err
 	}
 
 	if ks.Type == "manual" {
-		return KeySourceKeyResponse{Key: VLESSKey{Label: ks.Label, Link: ks.VlessLink}}, nil
+		return dto.KeySourceKeyResponse{Key: model.VLESSKey{Label: ks.Label, Link: ks.VlessLink}}, nil
 	}
 
 	panel, err := s.storage.GetPanel(ks.PanelID)
 	if err != nil {
-		return KeySourceKeyResponse{}, errNotFound("панель KeySource не найдена (удалена?)")
+		return dto.KeySourceKeyResponse{}, errNotFound("панель model.KeySource не найдена (удалена?)")
 	}
 
 	key, err := s.panelAPI.GetClientKeyForInbound(panel, ks.ClientEmail, ks.InboundID)
 	if err != nil {
 		log.Printf("GetKeySourceKey %s: %v", id, err)
 		if errors.Is(err, ErrPanelUnreachable) {
-			return KeySourceKeyResponse{}, errBadGateway("панель недоступна (таймаут 10 с)")
+			return dto.KeySourceKeyResponse{}, errBadGateway("панель недоступна (таймаут 10 с)")
 		}
-		return KeySourceKeyResponse{}, errNotFound(err.Error())
+		return dto.KeySourceKeyResponse{}, errNotFound(err.Error())
 	}
 
-	ks.CachedKey = &CachedKey{Link: key.Link, FetchedAt: nowStr()}
+	ks.CachedKey = &model.CachedKey{Link: key.Link, FetchedAt: nowStr()}
 	ks.UpdatedAt = nowStr()
 	if err := s.storage.UpdateKeySource(*ks); err != nil {
 		log.Printf("GetKeySourceKey: cache update failed: %v", err)
 	}
 
-	return KeySourceKeyResponse{Key: key, Source: ks}, nil
+	return dto.KeySourceKeyResponse{Key: key, Source: ks}, nil
 }
 
 // Test прогоняет test-single через демон и сохраняет lastTest.
-func (s *KeySourceService) Test(id string) (KeySourceTestResponse, error) {
+func (s *KeySourceService) Test(id string) (dto.KeySourceTestResponse, error) {
 	ks, err := s.storage.GetKeySource(id)
 	if err != nil {
-		return KeySourceTestResponse{}, err
+		return dto.KeySourceTestResponse{}, err
 	}
 
 	link := ""
@@ -266,22 +270,22 @@ func (s *KeySourceService) Test(id string) (KeySourceTestResponse, error) {
 	} else {
 		panel, err := s.storage.GetPanel(ks.PanelID)
 		if err != nil {
-			return KeySourceTestResponse{}, errNotFound("панель KeySource не найдена (удалена?)")
+			return dto.KeySourceTestResponse{}, errNotFound("панель model.KeySource не найдена (удалена?)")
 		}
 		key, err := s.panelAPI.GetClientKeyForInbound(panel, ks.ClientEmail, ks.InboundID)
 		if err != nil {
-			lastTest := &KeySourceTest{Status: "fail", At: nowStr(), Error: err.Error()}
+			lastTest := &model.KeySourceTest{Status: "fail", At: nowStr(), Error: err.Error()}
 			ks.LastTest = lastTest
 			ks.UpdatedAt = nowStr()
 			_ = s.storage.UpdateKeySource(*ks)
-			return KeySourceTestResponse{}, errBadGateway("не удалось получить ключ: " + err.Error())
+			return dto.KeySourceTestResponse{}, errBadGateway("не удалось получить ключ: " + err.Error())
 		}
 		link = key.Link
-		ks.CachedKey = &CachedKey{Link: key.Link, FetchedAt: nowStr()}
+		ks.CachedKey = &model.CachedKey{Link: key.Link, FetchedAt: nowStr()}
 	}
 
 	if strings.TrimSpace(link) == "" {
-		return KeySourceTestResponse{}, errBadRequest("у KeySource нет ключа для теста")
+		return dto.KeySourceTestResponse{}, errBadRequest("у model.KeySource нет ключа для теста")
 	}
 
 	start := time.Now()
@@ -289,24 +293,24 @@ func (s *KeySourceService) Test(id string) (KeySourceTestResponse, error) {
 	ms := int(time.Since(start).Milliseconds())
 	if err != nil {
 		if errors.Is(err, ErrDaemonUnreachable) {
-			lastTest := &KeySourceTest{Status: "fail", At: nowStr(), Error: "демон тестов недоступен: " + rootCause(err).Error()}
+			lastTest := &model.KeySourceTest{Status: "fail", At: nowStr(), Error: "демон тестов недоступен: " + rootCause(err).Error()}
 			ks.LastTest = lastTest
 			ks.UpdatedAt = nowStr()
 			_ = s.storage.UpdateKeySource(*ks)
-			return KeySourceTestResponse{Result: nil, LastTest: lastTest, Error: lastTest.Error}, nil
+			return dto.KeySourceTestResponse{Result: nil, LastTest: lastTest, Error: lastTest.Error}, nil
 		}
-		lastTest := &KeySourceTest{Status: "fail", At: nowStr(), Error: "не удалось разобрать ответ демона"}
+		lastTest := &model.KeySourceTest{Status: "fail", At: nowStr(), Error: "не удалось разобрать ответ демона"}
 		ks.LastTest = lastTest
 		ks.UpdatedAt = nowStr()
 		_ = s.storage.UpdateKeySource(*ks)
-		return KeySourceTestResponse{Result: nil, LastTest: lastTest, Error: lastTest.Error}, nil
+		return dto.KeySourceTestResponse{Result: nil, LastTest: lastTest, Error: lastTest.Error}, nil
 	}
 
 	status := "fail"
 	if single.Status == "OK" {
 		status = "ok"
 	}
-	lastTest := &KeySourceTest{Status: status, At: nowStr(), Ms: ms}
+	lastTest := &model.KeySourceTest{Status: status, At: nowStr(), Ms: ms}
 	if status == "fail" {
 		lastTest.Error = "ключ не прошёл тест демона"
 	}
@@ -314,30 +318,30 @@ func (s *KeySourceService) Test(id string) (KeySourceTestResponse, error) {
 	ks.UpdatedAt = nowStr()
 	_ = s.storage.UpdateKeySource(*ks)
 
-	return KeySourceTestResponse{Result: &single, LastTest: lastTest}, nil
+	return dto.KeySourceTestResponse{Result: &single, LastTest: lastTest}, nil
 }
 
-// Traffic возвращает up/down/expiry для panel-KeySource.
-func (s *KeySourceService) Traffic(id string) (KeySourceTrafficResponse, error) {
+// Traffic возвращает up/down/expiry для panel-model.KeySource.
+func (s *KeySourceService) Traffic(id string) (dto.KeySourceTrafficResponse, error) {
 	ks, err := s.storage.GetKeySource(id)
 	if err != nil {
-		return KeySourceTrafficResponse{}, err
+		return dto.KeySourceTrafficResponse{}, err
 	}
 	if ks.Type == "manual" {
-		return KeySourceTrafficResponse{}, errBadRequest("manual KeySource не имеет трафика")
+		return dto.KeySourceTrafficResponse{}, errBadRequest("manual model.KeySource не имеет трафика")
 	}
 
 	panel, err := s.storage.GetPanel(ks.PanelID)
 	if err != nil {
-		return KeySourceTrafficResponse{}, errNotFound("панель KeySource не найдена (удалена?)")
+		return dto.KeySourceTrafficResponse{}, errNotFound("панель model.KeySource не найдена (удалена?)")
 	}
 
 	client, err := s.panelAPI.GetClientStats(panel, ks.ClientEmail)
 	if err != nil {
-		return KeySourceTrafficResponse{}, errNotFound(err.Error())
+		return dto.KeySourceTrafficResponse{}, errNotFound(err.Error())
 	}
 
-	return KeySourceTrafficResponse{
+	return dto.KeySourceTrafficResponse{
 		Up:         client.Up,
 		Down:       client.Down,
 		ExpiryTime: client.ExpiryTime,
@@ -345,8 +349,8 @@ func (s *KeySourceService) Traffic(id string) (KeySourceTrafficResponse, error) 
 	}, nil
 }
 
-// enrichKeySource fills derived fields (status, traffic, names) for a KeySource.
-func (s *KeySourceService) enrichKeySource(ks *KeySource, panelMap map[string]Panel, snapshot map[string]*panelSnapshot, usage map[string]int) {
+// enrichKeySource fills derived fields (status, traffic, names) for a model.KeySource.
+func (s *KeySourceService) enrichKeySource(ks *model.KeySource, panelMap map[string]model.Panel, snapshot map[string]*panelSnapshot, usage map[string]int) {
 	ks.UsedInSubs = usage[ks.ID]
 
 	if ks.Type == "manual" {
@@ -383,7 +387,7 @@ func (s *KeySourceService) enrichKeySource(ks *KeySource, panelMap map[string]Pa
 		}
 	}
 
-	var client *Client
+	var client *model.Client
 	for i := range snap.clients {
 		if snap.clients[i].Email == ks.ClientEmail {
 			client = &snap.clients[i]
@@ -421,7 +425,7 @@ func (s *KeySourceService) enrichKeySource(ks *KeySource, panelMap map[string]Pa
 	}
 
 	ks.Status = "ok"
-	ks.Traffic = &KeySourceTraffic{Up: client.Up, Down: client.Down}
+	ks.Traffic = &model.KeySourceTraffic{Up: client.Up, Down: client.Down}
 	ks.KeyAvailable = ks.CachedKey != nil && ks.CachedKey.Link != ""
 }
 

@@ -1,6 +1,12 @@
 package main
 
-import "context"
+import (
+	"context"
+
+	"vlesspanel/dto"
+	"vlesspanel/model"
+	"vlesspanel/xui"
+)
 
 // Интерфейсы, от которых зависят сервисы (use-case слой). Конкретные
 // реализации: *Storage (Repository), *PanelAPI (PanelClient),
@@ -10,60 +16,60 @@ import "context"
 // Repository — интерфейс файлового хранилища.
 type Repository interface {
 	// panels
-	LoadPanels() ([]Panel, error)
-	GetPanel(id string) (Panel, error)
-	AddPanel(req CreatePanelRequest) (Panel, error)
+	LoadPanels() ([]model.Panel, error)
+	GetPanel(id string) (model.Panel, error)
+	AddPanel(req dto.CreatePanelRequest) (model.Panel, error)
 	DeletePanel(id string) error
 
 	// key sources
-	LoadKeySources() ([]KeySource, error)
-	GetKeySource(id string) (*KeySource, error)
-	AddKeySource(ks KeySource) (*KeySource, bool, error)
-	UpdateKeySource(ks KeySource) error
-	UpdateKeySourceCaches(caches map[string]CachedKey) error
+	LoadKeySources() ([]model.KeySource, error)
+	GetKeySource(id string) (*model.KeySource, error)
+	AddKeySource(ks model.KeySource) (*model.KeySource, bool, error)
+	UpdateKeySource(ks model.KeySource) error
+	UpdateKeySourceCaches(caches map[string]model.CachedKey) error
 	DeleteKeySource(id string) error
 
 	// subscriptions meta
-	LoadSubscriptionsMeta() ([]Subscription, error)
-	GetSubMeta(name string) (*Subscription, bool)
-	UpsertSubMeta(sub Subscription) error
+	LoadSubscriptionsMeta() ([]model.Subscription, error)
+	GetSubMeta(name string) (*model.Subscription, bool)
+	UpsertSubMeta(sub model.Subscription) error
 	DeleteSubMeta(name string) error
-	ListSubscriptions() ([]Subscription, error)
-	GetSubscription(name string) (*Subscription, error)
+	ListSubscriptions() ([]model.Subscription, error)
+	GetSubscription(name string) (*model.Subscription, error)
 
 	// subscription files
 	SubscriptionFileExists(name string) bool
-	WriteSubscriptionFile(name string, keys []SubKey) error
+	WriteSubscriptionFile(name string, keys []model.SubKey) error
 	RenameSubscriptionFile(oldName, newName string) error
 	RemoveSubscriptionFile(name string) error
 	SubscriptionFileMtime(name string) string
 	GetSubscriptionRaw(name string) (string, error)
 
 	// tokens
-	LoadTokens() ([]APIToken, error)
-	AddToken(tok APIToken) error
-	DeleteToken(id string) (APIToken, error)
+	LoadTokens() ([]model.APIToken, error)
+	AddToken(tok model.APIToken) error
+	DeleteToken(id string) (model.APIToken, error)
 }
 
 // PanelClient — интерфейс клиента 3X-UI панели.
 type PanelClient interface {
-	ListClients(panel Panel) ([]Client, error)
-	CreateClient(panel Panel, inboundID int, email, expiryDate string) error
-	GetClientKeys(panel Panel, email string) ([]VLESSKey, error)
-	ListInbounds(panel Panel) ([]XUIInbound, error)
-	AttachClient(panel Panel, email string, inboundID int) error
-	DetachClient(panel Panel, email string, inboundID int) error
-	UpdateClient(panel Panel, email string, expiryTime int64) error
-	GetClientKeyForInbound(panel Panel, email string, inboundID int) (VLESSKey, error)
-	GetClientStats(panel Panel, email string) (*Client, error)
-	ListClientsAndInbounds(panel Panel) ([]Client, []XUIInbound, error)
-	GetClientKeysForEmails(panel Panel, emails []string, concurrency int) (map[string][]VLESSKey, []XUIInbound, error)
+	ListClients(panel model.Panel) ([]model.Client, error)
+	CreateClient(panel model.Panel, inboundID int, email, expiryDate string) error
+	GetClientKeys(panel model.Panel, email string) ([]model.VLESSKey, error)
+	ListInbounds(panel model.Panel) ([]xui.XUIInbound, error)
+	AttachClient(panel model.Panel, email string, inboundID int) error
+	DetachClient(panel model.Panel, email string, inboundID int) error
+	UpdateClient(panel model.Panel, email string, expiryTime int64) error
+	GetClientKeyForInbound(panel model.Panel, email string, inboundID int) (model.VLESSKey, error)
+	GetClientStats(panel model.Panel, email string) (*model.Client, error)
+	ListClientsAndInbounds(panel model.Panel) ([]model.Client, []xui.XUIInbound, error)
+	GetClientKeysForEmails(panel model.Panel, emails []string, concurrency int) (map[string][]model.VLESSKey, []xui.XUIInbound, error)
 }
 
 // VlessSubTestClient — интерфейс демона тестов (vlesssubtest).
 type VlessSubTestClient interface {
-	Status() VlessSubTestStatus
-	TestSingle(vless string, timeout int) (TestSingleResponse, error)
+	Status() dto.VlessSubTestStatus
+	TestSingle(vless string, timeout int) (dto.TestSingleResponse, error)
 }
 
 // AggregatorSyncer — интерфейс синка файлов с агрегатором.
