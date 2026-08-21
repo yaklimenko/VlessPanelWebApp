@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { api, getToken, setToken } from './api';
+import { api, getToken, setToken, loadConfig, getPublicUrl } from './api';
 import {
   ToastProvider, useToast,
   Header, ClientCard, KSChip,
@@ -795,7 +795,7 @@ function SubscriptionDetail({
             <>
               <div className="row">
                 <span>Файл:</span><code className="copyable" title="Клик — скопировать" onClick={() => onCopyValue(`configs-${sub.name}.txt`, 'Имя файла')}>configs-{sub.name}.txt</code>
-                <span>·</span><span>Ссылка:</span><code className="copyable" title="Клик — скопировать" onClick={() => onCopyValue(`https://example.com/sub/${sub.name}`, 'Ссылка подписки')}>https://example.com/sub/{sub.name}</code>
+                <span>·</span><span>Ссылка:</span><code className="copyable" title="Клик — скопировать" onClick={() => onCopyValue(`${getPublicUrl()}/sub/${sub.name}`, 'Ссылка подписки')}>{getPublicUrl()}/sub/{sub.name}</code>
               </div>
               <div className="row">
                 <span>Локально (mtime):</span><code>{fmtDateTime(sub.fileMtime) || '—'}</code>
@@ -884,6 +884,7 @@ function AuthGate({ children }) {
   const [authEnabled, setAuthEnabled] = useState(null);
 
   useEffect(() => {
+    loadConfig();
     fetch('/api/auth-status')
       .then((r) => r.json())
       .then((d) => setAuthEnabled(!!d.enabled))

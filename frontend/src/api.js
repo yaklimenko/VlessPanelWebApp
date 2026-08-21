@@ -2,6 +2,27 @@ const API_BASE = '/api';
 const TOKEN_KEY = 'vlesspanel:token';
 const UNAUTHORIZED_EVENT = 'vlesspanel:unauthorized';
 
+// Публичный URL агрегатора (для ссылок на подписки). Подгружается с /api/config.
+let publicUrl = 'https://example.com';
+
+export function setPublicUrl(u) {
+  if (u) publicUrl = String(u).replace(/\/+$/, '');
+}
+
+export function getPublicUrl() {
+  return publicUrl;
+}
+
+export async function loadConfig() {
+  try {
+    const res = await fetch(`${API_BASE}/config`);
+    if (res.ok) {
+      const data = await res.json();
+      setPublicUrl(data.publicUrl);
+    }
+  } catch {}
+}
+
 export function getToken() {
   try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
 }

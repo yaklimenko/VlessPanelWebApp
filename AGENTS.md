@@ -16,6 +16,7 @@
 - Выпуск/отзыв токенов: `scripts/tokens.sh issue <label> | list | revoke <id>` (нужны `VLESSPANEL_ADMIN_TOKEN` и `VLESSPANEL_BASE`, по умолчанию `http://localhost:9090`).
 - Токены хранятся в `data/tokens.json` **только как sha256-хэш**; raw показывается один раз при выпуске.
 - Для включения auth в deploy добавьте `-e VLESSPANEL_ADMIN_TOKEN=<секрет>` в команду `docker run`.
+- Публичный URL агрегатора (для ссылок `…/sub/<имя>`): env `VLESSPANEL_PUBLIC_URL` (дефолт `https://example.com`), отдаётся фронту через `GET /api/config`.
 
 ## Окружение и точки доступа
 
@@ -62,6 +63,7 @@
 - `POST /sync` — rsync-скрипт на агрегатор.
 - `GET  /vlesssubtest-status` — health демона.
 - `GET  /auth-status` — включена ли auth (без токена).
+- `GET  /config` — публичная конфигурация фронта (без токена): `{"publicUrl": "..."}`.
 - `GET  /tokens` — список выпущенных токенов (только master).
 - `POST /tokens` — выпустить токен (только master, body: `{label}`) → `{token (raw), tokenMeta}`.
 - `DELETE /tokens/{id}` — отозвать токен (только master).
@@ -116,13 +118,8 @@ curl -sk -X POST -H "Authorization: Bearer $TOK" "$URL/panel/api/clients/del/$EM
 
 ## Известные архитектурные слабости (контекст для рефакторинга)
 
-Подробности — в архитектурном ревью (см. историю чата). Кратко (актуально на текущий момент):
-- Весь backend в `package main`, god file `handlers.go` (~1800 строк), нет слоёв transport/service/repository.
-- VlessSubTest-клиент создаётся ad-hoc в 2 местах (`TestSubscription`, `TestKeySource`).
-- `SyncToAggregator` дёргает shell-скрипт прямо из хендлера.
-- Frontend: `App.jsx` (~900 строк, complexity 67) и `components/index.jsx` (677 строк) — god files.
-- `InsecureSkipVerify: true` для всех панелей без per-panel флага.
-- Двуязычные сообщения (English + Russian) без i18n-стратегии.
-- Хардкод прод-URL `https://example.com` в `config.go`.
+Осталось (актуально на текущий момент):
+- Frontend — god files: `App.jsx` (~900 строк, complexity 67) и `components/index.jsx` (~680 строк, все компоненты в одном файле). — пункт 14.
+- Сервисы/storage/handlers всё ещё в `package main` (типы вынесены в `model`/`dto`/`xui`, но сами слои не в подпакетах).
 
-Уже исправлено в этой ветке: TOCTOU-гонки, `strings.Contains`-диспетчеризация ошибок, цикл Storage↔Handlers (SetOnChange), path traversal, таймауты/graceful shutdown HTTP-сервера, CORS `*`, базовая auth (bearer-token + выпуск токенов), параллельный regenerate-all. Добавлены unit-тесты (`storage_test.go`, `panelapi_test.go`, `auth_test.go`).
+Уже исправлено в этой ветке: TOCTOU-гонки, `strings.Contains`-диспетчеризация ошибок, цикл Storage↔Handlers (SetOnChange), path traversal, таймауты/graceful shutdown HTTP-сервера, CORS `*`, auth (bearer-token + выпуск токенов), параллельный regenerate-all, service/use-case слой, интерфейсы (Repository/PanelClient/VlessSubTestClient/AggregatorSyncer), разнесение типов по пакетам, per-panel `insecureSkipVerify`, i18n (единый русский), хардкод прод-URL (вынесен в `VLESSPANEL_PUBLIC_URL`). Добавлены unit-тесты сервисов/хранилища/панелей/авторизации.

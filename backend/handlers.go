@@ -20,11 +20,12 @@ type Handlers struct {
 	sync          *SyncService
 	tokens        *TokenService
 	daemon        VlessSubTestClient
+	publicURL     string
 }
 
 // NewHandlers creates a new Handlers instance.
 func NewHandlers(auth *TokenAuth, panels *PanelService, subscriptions *SubscriptionService,
-	keySources *KeySourceService, sync *SyncService, tokens *TokenService, daemon VlessSubTestClient) *Handlers {
+	keySources *KeySourceService, sync *SyncService, tokens *TokenService, daemon VlessSubTestClient, publicURL string) *Handlers {
 	return &Handlers{
 		auth:          auth,
 		panels:        panels,
@@ -33,6 +34,7 @@ func NewHandlers(auth *TokenAuth, panels *PanelService, subscriptions *Subscript
 		sync:          sync,
 		tokens:        tokens,
 		daemon:        daemon,
+		publicURL:     publicURL,
 	}
 }
 
@@ -377,6 +379,11 @@ func (h *Handlers) GetVlessSubTestStatus(w http.ResponseWriter, r *http.Request)
 }
 
 // --- Auth / Tokens ---
+
+// GetConfig возвращает публичную конфигурацию для фронта (без auth).
+func (h *Handlers) GetConfig(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{"publicUrl": h.publicURL})
+}
 
 func (h *Handlers) GetAuthStatus(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]bool{"enabled": h.auth.Enabled()})

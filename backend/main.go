@@ -49,7 +49,7 @@ func main() {
 	syncSvc := NewSyncService(syncState, NewScriptSyncer(config.SyncScript))
 	tokens := NewTokenService(storage, auth)
 
-	handlers := NewHandlers(auth, panels, subscriptions, keySources, syncSvc, tokens, daemon)
+	handlers := NewHandlers(auth, panels, subscriptions, keySources, syncSvc, tokens, daemon, config.PublicURL)
 
 	// Router
 	r := chi.NewRouter()
@@ -59,6 +59,7 @@ func main() {
 
 	// Без аутентификации (на корневом роутере, вне /api-группы с authMiddleware).
 	r.Get("/api/auth-status", handlers.GetAuthStatus)
+	r.Get("/api/config", handlers.GetConfig)
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import { getPublicUrl } from '../api';
 
 // ─── Toast System ───
 const ToastContext = createContext(null);
@@ -472,7 +473,7 @@ export function ReportModal({ subName, report, included, skipped, onClose }) {
           </div>
         )}
         <div className="form-hint">
-          Файл: <code className="mono">configs-{subName}.txt</code> · ссылка: <code className="mono">https://example.com/sub/{subName}</code>
+          Файл: <code className="mono">configs-{subName}.txt</code> · ссылка: <code className="mono">{getPublicUrl()}/sub/{subName}</code>
           <br />Не забудьте синхронизировать с агрегатором.
         </div>
         <div className="modal-actions">

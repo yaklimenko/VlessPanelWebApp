@@ -15,7 +15,7 @@ type Config struct {
 	StaticDir             string
 	VlessSubTestDaemonURL string
 	DataDir               string
-	AggregatorURL         string // base URL of the aggregator (for sync status HEAD)
+	PublicURL             string // публичный базовый URL агрегатора (для ссылок на подписки)
 	SyncScript            string // rsync script to push configs to the aggregator
 	AdminToken            string // master token; empty = auth disabled
 
@@ -59,9 +59,9 @@ func LoadConfig() Config {
 		dataDir = filepath.Dir(panelsFile)
 	}
 
-	aggURL := os.Getenv("VLESSPANEL_AGGREGATOR_URL")
-	if aggURL == "" {
-		aggURL = "https://example.com"
+	publicURL := os.Getenv("VLESSPANEL_PUBLIC_URL")
+	if publicURL == "" {
+		publicURL = "https://example.com"
 	}
 
 	syncScript := os.Getenv("VLESSPANEL_SYNC_SCRIPT")
@@ -78,7 +78,7 @@ func LoadConfig() Config {
 		StaticDir:             staticDir,
 		VlessSubTestDaemonURL: daemonURL,
 		DataDir:               dataDir,
-		AggregatorURL:         aggURL,
+		PublicURL:             publicURL,
 		SyncScript:            syncScript,
 		AdminToken:            adminToken,
 		ReadHeaderTimeout:     envDuration("VLESSPANEL_READ_HEADER_TIMEOUT", 10*time.Second),
@@ -102,8 +102,4 @@ func envDuration(key string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
-}
-
-func (c Config) SubscriptionFilePath(name string) string {
-	return filepath.Join(c.AggregatorDir, "configs-"+name+".txt")
 }
