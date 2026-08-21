@@ -26,7 +26,8 @@ func main() {
 	// Initialize storage
 	storage := NewStorage(config.PanelsFilePath, config.AggregatorDir, config.DataDir)
 	panelAPI := NewPanelAPI()
-	handlers := NewHandlers(storage, panelAPI, config)
+	syncState := NewSyncState()
+	handlers := NewHandlers(storage, panelAPI, config, syncState)
 
 	// Router
 	r := chi.NewRouter()

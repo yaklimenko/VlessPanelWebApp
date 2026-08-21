@@ -26,29 +26,17 @@ type Handlers struct {
 	storage  *Storage
 	panelAPI *PanelAPI
 	config   Config
-
-	syncMu     sync.Mutex
-	syncNeeded bool // true после любой мутации — нужно синкать с агрегатором
+	sync     *SyncState
 }
 
 // NewHandlers creates a new Handlers instance
-func NewHandlers(storage *Storage, panelAPI *PanelAPI, config Config) *Handlers {
-	h := &Handlers{
-		storage:    storage,
-		panelAPI:   panelAPI,
-		config:     config,
-		syncNeeded: true, // при старте статус неизвестен — до первого синка честно показываем «требуется синк»
+func NewHandlers(storage *Storage, panelAPI *PanelAPI, config Config, sync *SyncState) *Handlers {
+	return &Handlers{
+		storage:  storage,
+		panelAPI: panelAPI,
+		config:   config,
+		sync:     sync,
 	}
-	storage.SetOnChange(h.markSyncNeeded)
-	return h
-}
-
-// markSyncNeeded поднимает флаг «нужна сверка с агрегатором» после любой мутации
-// (ключей, подписок, файлов). Сбрасывается после полной проверки или синка.
-func (h *Handlers) markSyncNeeded() {
-	h.syncMu.Lock()
-	h.syncNeeded = true
-	h.syncMu.Unlock()
 }
 
 // respondJSON writes a JSON response
@@ -400,6 +388,7 @@ func (h *Handlers) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "Failed to write subscription file")
 			return
 		}
+		h.sync.Mark()
 	}
 
 	now := nowStr()
@@ -485,6 +474,7 @@ func (h *Handlers) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 				respondError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
+			h.sync.Mark()
 		}
 		if err := h.storage.DeleteSubMeta(id); err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
@@ -524,6 +514,7 @@ func (h *Handlers) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		h.sync.Mark()
 		if err := h.storage.UpsertSubMeta(meta); err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -585,6 +576,7 @@ func (h *Handlers) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		h.sync.Mark()
 		if err := h.storage.UpsertSubMeta(meta); err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -609,6 +601,7 @@ func (h *Handlers) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		h.sync.Mark()
 		if err := h.storage.UpsertSubMeta(meta); err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -640,6 +633,7 @@ func (h *Handlers) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.sync.Mark()
 	if err := h.storage.DeleteSubMeta(id); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -978,6 +972,9 @@ func (h *Handlers) DeleteKeySource(w http.ResponseWriter, r *http.Request) {
 			log.Printf("DeleteKeySource: upsert meta for %s: %v", sub.Name, err)
 		}
 		affected = append(affected, sub.Name)
+	}
+	if len(affected) > 0 {
+		h.sync.Mark()
 	}
 
 	if err := h.storage.DeleteKeySource(id); err != nil {
@@ -1428,6 +1425,7 @@ func (h *Handlers) RegenerateAllSubscriptions(w http.ResponseWriter, r *http.Req
 				continue
 			}
 		}
+		h.sync.Mark()
 		if err := h.storage.UpsertSubMeta(*sub); err != nil {
 			skipped++
 			results = append(results, subResult{Name: sub.Name, Regenerated: false, Reason: err.Error()})
@@ -1474,9 +1472,7 @@ func (h *Handlers) SyncToAggregator(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Синк прошёл: локальные файлы = агрегатор. Флаг опускаем — всё синхронизировано.
-	h.syncMu.Lock()
-	h.syncNeeded = false
-	h.syncMu.Unlock()
+	h.sync.Clear()
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "synced",
@@ -1485,8 +1481,8 @@ func (h *Handlers) SyncToAggregator(w http.ResponseWriter, r *http.Request) {
 }
 
 // enrichSync sets the sync status of a subscription from the global flag
-// isAggregatorSyncNeeded: после синка — всё синхронизировано, после любой
-// мутации — требуется синк. Никаких HTTP-запросов к агрегатору.
+// (SyncState): после синка — всё синхронизировано, после изменения файла
+// подписки — требуется синк. Никаких HTTP-запросов к агрегатору.
 func (h *Handlers) enrichSync(sub *Subscription) {
 	if sub == nil {
 		return
@@ -1498,11 +1494,7 @@ func (h *Handlers) enrichSync(sub *Subscription) {
 		return
 	}
 
-	h.syncMu.Lock()
-	needed := h.syncNeeded
-	h.syncMu.Unlock()
-
-	synced := !needed
+	synced := !h.sync.Needed()
 	sub.Synced = &synced
 	sub.AggrLastModified = ""
 }

@@ -25,19 +25,6 @@ type Storage struct {
 	aggregatorDir  string
 	keySourcesPath string
 	subsMetaPath   string
-	onChange       func() // вызывается после любой записи, влияющей на агрегатор
-}
-
-// SetOnChange registers a callback invoked after any persistent mutation
-// (key sources / subscriptions / files). Used to mark “aggregator sync needed”.
-func (s *Storage) SetOnChange(fn func()) {
-	s.onChange = fn
-}
-
-func (s *Storage) notifyChange() {
-	if s.onChange != nil {
-		s.onChange()
-	}
 }
 
 // NewStorage creates a new Storage instance.
@@ -225,7 +212,6 @@ func (s *Storage) SaveKeySources(sources []KeySource) error {
 	if err := os.WriteFile(s.keySourcesPath, data, 0644); err != nil {
 		return fmt.Errorf("writing key sources file: %w", err)
 	}
-	s.notifyChange()
 
 	return nil
 }
@@ -350,7 +336,6 @@ func (s *Storage) SaveSubscriptionsMeta(subs []Subscription) error {
 	if err := os.WriteFile(s.subsMetaPath, data, 0644); err != nil {
 		return fmt.Errorf("writing subscriptions meta: %w", err)
 	}
-	s.notifyChange()
 	return nil
 }
 
@@ -440,7 +425,6 @@ func (s *Storage) WriteSubscriptionFile(name string, keys []SubKey) error {
 	if err := os.WriteFile(s.subscriptionFile(name), []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing subscription file: %w", err)
 	}
-	s.notifyChange()
 	return nil
 }
 
@@ -451,7 +435,6 @@ func (s *Storage) RenameSubscriptionFile(oldName, newName string) error {
 	if err := os.Rename(s.subscriptionFile(oldName), s.subscriptionFile(newName)); err != nil {
 		return fmt.Errorf("renaming subscription file: %w", err)
 	}
-	s.notifyChange()
 	return nil
 }
 
@@ -462,7 +445,6 @@ func (s *Storage) RemoveSubscriptionFile(name string) error {
 	if err := os.Remove(s.subscriptionFile(name)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("removing subscription file: %w", err)
 	}
-	s.notifyChange()
 	return nil
 }
 
