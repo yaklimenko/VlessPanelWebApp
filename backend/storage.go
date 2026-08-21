@@ -298,6 +298,30 @@ func (s *Storage) UpdateKeySource(updated KeySource) error {
 	return s.saveKeySourcesLocked(sources)
 }
 
+// UpdateKeySourceCaches обновляет CachedKey для нескольких KeySource в одном
+// атомарном read-modify-write (одна запись файла). Несуществующие ID
+// игнорируются. Используется при массовой регенерации, чтобы не перезаписывать
+// key-sources.json по одному на каждый ключ.
+func (s *Storage) UpdateKeySourceCaches(caches map[string]CachedKey) error {
+	if len(caches) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sources, err := s.loadKeySourcesLocked()
+	if err != nil {
+		return err
+	}
+	for i := range sources {
+		if c, ok := caches[sources[i].ID]; ok {
+			sources[i].CachedKey = &c
+			sources[i].UpdatedAt = nowStr()
+		}
+	}
+	return s.saveKeySourcesLocked(sources)
+}
+
 // DeleteKeySource removes a KeySource by ID (atomic read-modify-write).
 func (s *Storage) DeleteKeySource(id string) error {
 	s.mu.Lock()

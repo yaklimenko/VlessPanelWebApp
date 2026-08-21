@@ -193,3 +193,39 @@ func TestSubscriptionFileRejectsUnsafeNames(t *testing.T) {
 		t.Fatalf("valid read failed: %q, %v", raw, err)
 	}
 }
+
+// UpdateKeySourceCaches должен обновить кэш нескольких KeySource одной атомарной
+// записью и не трогать отсутствующие ID.
+func TestUpdateKeySourceCaches(t *testing.T) {
+	s := newTestStorage(t)
+
+	mk := func(id string) {
+		_, _, err := s.AddKeySource(KeySource{ID: id, Type: "manual", VlessLink: "vless://" + id + "@x", Label: id})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("a")
+	mk("b")
+
+	err := s.UpdateKeySourceCaches(map[string]CachedKey{
+		"a":     {Link: "vless://a@x"},
+		"b":     {Link: "vless://b@x"},
+		"ghost": {Link: "vless://ghost@x"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := s.GetKeySource("a")
+	if err != nil || a.CachedKey == nil || a.CachedKey.Link != "vless://a@x" {
+		t.Fatalf("a cache not updated: %+v, %v", a.CachedKey, err)
+	}
+	b, err := s.GetKeySource("b")
+	if err != nil || b.CachedKey == nil || b.CachedKey.Link != "vless://b@x" {
+		t.Fatalf("b cache not updated: %+v, %v", b.CachedKey, err)
+	}
+	if _, err := s.GetKeySource("ghost"); err == nil {
+		t.Fatalf("ghost should not have been created")
+	}
+}

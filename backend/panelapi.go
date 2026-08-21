@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -387,6 +388,54 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 		log.Printf("GetClientKeys: panel links endpoint unavailable for %s, falling back to locally generated links: %v", email, linkErr)
 	}
 
+	return buildClientKeys(panel, inbounds, panelLinks, email), nil
+}
+
+// GetClientKeysForEmails resolves VLESS keys for multiple client emails on one
+// panel using a single inbounds snapshot. Link fetches per email run with
+// bounded concurrency. Returns keys grouped by email and the inbounds snapshot
+// (caller maps inboundID → port). Used by regenerate-all to avoid the N+1
+// pattern of GetClientKeyForInbound.
+func (api *PanelAPI) GetClientKeysForEmails(panel Panel, emails []string, concurrency int) (map[string][]VLESSKey, []XUIInbound, error) {
+	inbounds, err := api.ListInbounds(panel)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	keys := make(map[string][]VLESSKey, len(emails))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, concurrency)
+
+	for _, email := range emails {
+		wg.Add(1)
+		go func(email string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			panelLinks, linkErr := api.GetClientLinks(panel, email)
+			if linkErr != nil {
+				log.Printf("GetClientKeysForEmails: panel links unavailable for %s: %v", email, linkErr)
+			}
+			ks := buildClientKeys(panel, inbounds, panelLinks, email)
+			mu.Lock()
+			keys[email] = ks
+			mu.Unlock()
+		}(email)
+	}
+	wg.Wait()
+
+	return keys, inbounds, nil
+}
+
+// buildClientKeys constructs VLESS keys for one client across all inbounds from
+// an already-fetched inbounds snapshot and the panel's links (keyed by port).
+// Pure: no HTTP calls.
+func buildClientKeys(panel Panel, inbounds []XUIInbound, panelLinks map[int]string, email string) []VLESSKey {
 	var keys []VLESSKey
 
 	for _, inbound := range inbounds {
@@ -401,7 +450,7 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 
 		var settings ParsedSettings
 		if err := json.Unmarshal(inbound.Settings, &settings); err != nil {
-			log.Printf("GetClientKeys: failed to unmarshal settings for inbound %d (%s) while getting keys for %s: %v\nSettings: %s",
+			log.Printf("buildClientKeys: failed to unmarshal settings for inbound %d (%s) while getting keys for %s: %v\nSettings: %s",
 				inbound.ID, inbound.Remark, email, err, string(inbound.Settings))
 			continue
 		}
@@ -489,7 +538,7 @@ func (api *PanelAPI) GetClientKeys(panel Panel, email string) ([]VLESSKey, error
 		}
 	}
 
-	return keys, nil
+	return keys
 }
 
 // CreateClient creates a new client on a panel's inbounds (3X-UI v3.5.0+)

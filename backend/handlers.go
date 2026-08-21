@@ -1361,14 +1361,110 @@ func (h *Handlers) regenerateKeys(keys []SubKey, report *GenerationReport) ([]Su
 
 // ─── Sync ───
 
+// keyResolveResult — результат резолва свежего ключа одного panel-KeySource.
+type keyResolveResult struct {
+	key VLESSKey
+	err error
+}
+
+// perPanelConcurrency — сколько ссылок на клиентов панели запрашивать
+// одновременно (3X-UI /clients/links/{email}).
+const perPanelConcurrency = 3
+
+// resolvePanelKeys резолвит свежие VLESS-ключи для panel-KeySource'ов, сгруппировав
+// их по панелям: панели запрашиваются параллельно, внутри панели — до
+// perPanelConcurrency конкурентных запросов ссылок. Успешные результаты
+// складываются в кэш одним батчевым апдейтом. Возвращает map keySourceID → result.
+func (h *Handlers) resolvePanelKeys(panelMap map[string]Panel, sourcesByPanel map[string]map[string]KeySource) map[string]keyResolveResult {
+	results := make(map[string]keyResolveResult)
+	caches := make(map[string]CachedKey)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for pid, sources := range sourcesByPanel {
+		panel := panelMap[pid]
+		wg.Add(1)
+		go func(panel Panel, sources map[string]KeySource) {
+			defer wg.Done()
+
+			emails := make([]string, 0, len(sources))
+			seen := make(map[string]bool, len(sources))
+			for _, ks := range sources {
+				if !seen[ks.ClientEmail] {
+					seen[ks.ClientEmail] = true
+					emails = append(emails, ks.ClientEmail)
+				}
+			}
+
+			keysByEmail, inbounds, err := h.panelAPI.GetClientKeysForEmails(panel, emails, perPanelConcurrency)
+
+			portByInbound := make(map[int]int, len(inbounds))
+			for _, ib := range inbounds {
+				portByInbound[ib.ID] = ib.Port
+			}
+
+			for id, ks := range sources {
+				res := keyResolveResult{}
+				if err != nil {
+					res.err = err
+				} else {
+					targetPort, ok := portByInbound[ks.InboundID]
+					if !ok {
+						res.err = fmt.Errorf("%w: inbound %d", ErrInboundNotFound, ks.InboundID)
+					} else {
+						found := false
+						for _, k := range keysByEmail[ks.ClientEmail] {
+							if k.Port == targetPort {
+								res.key = k
+								found = true
+								break
+							}
+						}
+						if !found {
+							res.err = fmt.Errorf("%w: client %s on inbound %d", ErrClientNotFound, ks.ClientEmail, ks.InboundID)
+						}
+					}
+				}
+
+				mu.Lock()
+				results[id] = res
+				if res.err == nil {
+					caches[id] = CachedKey{Link: res.key.Link, FetchedAt: nowStr()}
+				}
+				mu.Unlock()
+			}
+		}(panel, sources)
+	}
+	wg.Wait()
+
+	if len(caches) > 0 {
+		_ = h.storage.UpdateKeySourceCaches(caches)
+	}
+	return results
+}
+
 // RegenerateAllSubscriptions перегенерирует все подписки, в которых есть хотя бы
 // один panel-KeySource (свежие ключи с панелей). Подписки только с manual/legacy
-// ключами пропускаются. Возвращает отчёт по каждой подписке.
+// ключами пропускаются. Ключи резолвятся пакетно: панели параллельно, внутри
+// панели — до трёх конкурентных запросов (resolvePanelKeys). Возвращает отчёт
+// по каждой подписке.
 func (h *Handlers) RegenerateAllSubscriptions(w http.ResponseWriter, r *http.Request) {
 	subs, err := h.storage.ListSubscriptions()
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to load subscriptions")
 		return
+	}
+
+	panels, _ := h.storage.LoadPanels()
+	panelMap := make(map[string]Panel, len(panels))
+	for _, p := range panels {
+		panelMap[p.ID] = p
+	}
+
+	allKS, _ := h.storage.LoadKeySources()
+	ksByID := make(map[string]KeySource, len(allKS))
+	for _, ks := range allKS {
+		ksByID[ks.ID] = ks
 	}
 
 	type subResult struct {
@@ -1379,6 +1475,33 @@ func (h *Handlers) RegenerateAllSubscriptions(w http.ResponseWriter, r *http.Req
 		SkippedKeys int    `json:"skippedKeys,omitempty"`
 	}
 
+	// Фаза 1: собрать panel-KeySource'ы для резолва, сгруппировать по панели.
+	sourcesByPanel := make(map[string]map[string]KeySource)
+	for i := range subs {
+		for _, k := range subs[i].Keys {
+			if k.KeySourceID == nil {
+				continue
+			}
+			ks, ok := ksByID[*k.KeySourceID]
+			if !ok || ks.Type != "panel" {
+				continue
+			}
+			if _, ok := panelMap[ks.PanelID]; !ok {
+				continue // панель удалена — будет skip при пересборке
+			}
+			m := sourcesByPanel[ks.PanelID]
+			if m == nil {
+				m = make(map[string]KeySource)
+				sourcesByPanel[ks.PanelID] = m
+			}
+			m[ks.ID] = ks
+		}
+	}
+
+	// Фаза 2: резолв ключей (панели параллельно, внутри панели — конкурентно).
+	resolved := h.resolvePanelKeys(panelMap, sourcesByPanel)
+
+	// Фаза 3: пересобрать каждую подписку.
 	results := []subResult{}
 	regenerated := 0
 	skipped := 0
@@ -1392,7 +1515,7 @@ func (h *Handlers) RegenerateAllSubscriptions(w http.ResponseWriter, r *http.Req
 			if k.KeySourceID == nil {
 				continue
 			}
-			if ks, err := h.storage.GetKeySource(*k.KeySourceID); err == nil && ks.Type == "panel" {
+			if ks, ok := ksByID[*k.KeySourceID]; ok && ks.Type == "panel" {
 				hasPanel = true
 				break
 			}
@@ -1403,12 +1526,37 @@ func (h *Handlers) RegenerateAllSubscriptions(w http.ResponseWriter, r *http.Req
 			continue
 		}
 
-		report := &GenerationReport{Items: []GenerationReportItem{}}
-		keys, err := h.regenerateKeys(sub.Keys, report)
-		if err != nil {
-			skipped++
-			results = append(results, subResult{Name: sub.Name, Regenerated: false, Reason: err.Error()})
-			continue
+		keys := make([]SubKey, 0, len(sub.Keys))
+		okCount := 0
+		manualCount := 0
+		skipCount := 0
+		for _, k := range sub.Keys {
+			if k.KeySourceID == nil {
+				keys = append(keys, k)
+				manualCount++
+				continue
+			}
+			ks, exists := ksByID[*k.KeySourceID]
+			if !exists {
+				skipCount++ // KeySource не найден — ключ удалён
+				continue
+			}
+			if ks.Type == "manual" {
+				keys = append(keys, SubKey{ID: k.ID, Link: ks.VlessLink, KeySourceID: k.KeySourceID})
+				manualCount++
+				continue
+			}
+			if _, ok := panelMap[ks.PanelID]; !ok {
+				skipCount++ // панель удалена — ключ удалён
+				continue
+			}
+			res, ok := resolved[ks.ID]
+			if !ok || res.err != nil {
+				skipCount++
+				continue
+			}
+			keys = append(keys, SubKey{ID: k.ID, Link: res.key.Link, KeySourceID: k.KeySourceID})
+			okCount++
 		}
 
 		sub.Keys = keys
@@ -1435,8 +1583,8 @@ func (h *Handlers) RegenerateAllSubscriptions(w http.ResponseWriter, r *http.Req
 		results = append(results, subResult{
 			Name:        sub.Name,
 			Regenerated: true,
-			Included:    countKind(report.Items, "ok") + countKind(report.Items, "manual"),
-			SkippedKeys: countKind(report.Items, "skip"),
+			Included:    okCount + manualCount,
+			SkippedKeys: skipCount,
 		})
 	}
 

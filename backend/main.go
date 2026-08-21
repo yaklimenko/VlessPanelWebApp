@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -102,11 +105,31 @@ func main() {
 	log.Printf("Starting server on %s", addr)
 
 	server := &http.Server{
-		Addr:    addr,
-		Handler: r,
+		Addr:              addr,
+		Handler:           r,
+		ReadHeaderTimeout: config.ReadHeaderTimeout,
+		ReadTimeout:       config.ReadTimeout,
+		WriteTimeout:      config.WriteTimeout,
+		IdleTimeout:       config.IdleTimeout,
 	}
 
-	if err := server.ListenAndServe(); err != nil {
+	// Graceful shutdown: по SIGINT/SIGTERM (docker stop) дожидаемся завершения
+	// текущих запросов в пределах config.ShutdownTimeout.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		<-ctx.Done()
+		log.Println("shutdown signal received, draining connections...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), config.ShutdownTimeout)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("graceful shutdown failed: %v", err)
+		}
+	}()
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server error: %v", err)
 	}
+	log.Println("server stopped")
 }

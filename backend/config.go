@@ -1,8 +1,10 @@
 package main
 
 import (
+	"log"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // Config holds application configuration
@@ -15,6 +17,13 @@ type Config struct {
 	DataDir               string
 	AggregatorURL         string // base URL of the aggregator (for sync status HEAD)
 	SyncScript            string // rsync script to push configs to the aggregator
+
+	// HTTP-сервер: таймауты и время на graceful shutdown (см. main.go).
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	ShutdownTimeout   time.Duration
 }
 
 // LoadConfig loads configuration from environment variables with defaults
@@ -68,7 +77,27 @@ func LoadConfig() Config {
 		DataDir:               dataDir,
 		AggregatorURL:         aggURL,
 		SyncScript:            syncScript,
+		ReadHeaderTimeout:     envDuration("VLESSPANEL_READ_HEADER_TIMEOUT", 10*time.Second),
+		ReadTimeout:           envDuration("VLESSPANEL_READ_TIMEOUT", 30*time.Second),
+		WriteTimeout:          envDuration("VLESSPANEL_WRITE_TIMEOUT", 2*time.Minute),
+		IdleTimeout:           envDuration("VLESSPANEL_IDLE_TIMEOUT", 2*time.Minute),
+		ShutdownTimeout:       envDuration("VLESSPANEL_SHUTDOWN_TIMEOUT", 8*time.Second),
 	}
+}
+
+// envDuration читает duration из env-переменной с дефолтом def. При невалидном
+// значении логирует предупреждение и возвращает def.
+func envDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		log.Printf("config: invalid duration for %s (%q), using %s", key, v, def)
+		return def
+	}
+	return d
 }
 
 func (c Config) SubscriptionFilePath(name string) string {
