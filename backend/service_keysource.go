@@ -236,7 +236,7 @@ func (s *KeySourceService) GetKey(id string) (dto.KeySourceKeyResponse, error) {
 
 	panel, err := s.storage.GetPanel(ks.PanelID)
 	if err != nil {
-		return dto.KeySourceKeyResponse{}, errNotFound("панель model.KeySource не найдена (удалена?)")
+		return dto.KeySourceKeyResponse{}, errNotFound("панель KeySource не найдена (удалена?)")
 	}
 
 	key, err := s.panelAPI.GetClientKeyForInbound(panel, ks.ClientEmail, ks.InboundID)
@@ -270,7 +270,7 @@ func (s *KeySourceService) Test(id string) (dto.KeySourceTestResponse, error) {
 	} else {
 		panel, err := s.storage.GetPanel(ks.PanelID)
 		if err != nil {
-			return dto.KeySourceTestResponse{}, errNotFound("панель model.KeySource не найдена (удалена?)")
+			return dto.KeySourceTestResponse{}, errNotFound("панель KeySource не найдена (удалена?)")
 		}
 		key, err := s.panelAPI.GetClientKeyForInbound(panel, ks.ClientEmail, ks.InboundID)
 		if err != nil {
@@ -285,7 +285,7 @@ func (s *KeySourceService) Test(id string) (dto.KeySourceTestResponse, error) {
 	}
 
 	if strings.TrimSpace(link) == "" {
-		return dto.KeySourceTestResponse{}, errBadRequest("у model.KeySource нет ключа для теста")
+		return dto.KeySourceTestResponse{}, errBadRequest("у KeySource нет ключа для теста")
 	}
 
 	start := time.Now()
@@ -328,12 +328,12 @@ func (s *KeySourceService) Traffic(id string) (dto.KeySourceTrafficResponse, err
 		return dto.KeySourceTrafficResponse{}, err
 	}
 	if ks.Type == "manual" {
-		return dto.KeySourceTrafficResponse{}, errBadRequest("manual model.KeySource не имеет трафика")
+		return dto.KeySourceTrafficResponse{}, errBadRequest("manual KeySource не имеет трафика")
 	}
 
 	panel, err := s.storage.GetPanel(ks.PanelID)
 	if err != nil {
-		return dto.KeySourceTrafficResponse{}, errNotFound("панель model.KeySource не найдена (удалена?)")
+		return dto.KeySourceTrafficResponse{}, errNotFound("панель KeySource не найдена (удалена?)")
 	}
 
 	client, err := s.panelAPI.GetClientStats(panel, ks.ClientEmail)

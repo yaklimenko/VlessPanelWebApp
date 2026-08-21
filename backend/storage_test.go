@@ -81,7 +81,7 @@ func TestAddPanelConcurrentUniqueID(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			p, err := s.AddPanel(dto.CreatePanelRequest{Name: "Test model.Panel", URL: "https://x", Token: "t"})
+			p, err := s.AddPanel(dto.CreatePanelRequest{Name: "Test Panel", URL: "https://x", Token: "t"})
 			panels[i] = p
 			errs[i] = err
 		}(i)

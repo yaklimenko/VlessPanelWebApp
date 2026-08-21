@@ -220,7 +220,7 @@ func (s *SubscriptionService) Update(id string, req dto.UpdateSubscriptionReques
 				continue
 			}
 			if _, err := s.storage.GetKeySource(ksID); err != nil {
-				return dto.UpdateSubscriptionResult{}, errBadRequest("model.KeySource не найден: " + ksID)
+				return dto.UpdateSubscriptionResult{}, errBadRequest("KeySource не найден: " + ksID)
 			}
 			sid := ksID
 			meta.Keys = append(meta.Keys, model.SubKey{ID: "k-" + randID(), KeySourceID: &sid})
@@ -324,7 +324,7 @@ func (s *SubscriptionService) Test(id string) (dto.TestSubscriptionResponse, err
 		}
 	}
 	if len(testKeys) == 0 {
-		return dto.TestSubscriptionResponse{}, errBadRequest("model.Subscription has no keys to test")
+		return dto.TestSubscriptionResponse{}, errBadRequest("Subscription has no keys to test")
 	}
 
 	var results []dto.TestSingleResponse
@@ -416,7 +416,7 @@ func (s *SubscriptionService) RegenerateAll() (dto.RegenerateAllResponse, error)
 		}
 		if !hasPanel {
 			skipped++
-			results = append(results, dto.RegenerateSubResult{Name: sub.Name, Regenerated: false, Reason: "нет panel model.KeySource"})
+			results = append(results, dto.RegenerateSubResult{Name: sub.Name, Regenerated: false, Reason: "нет panel KeySource"})
 			continue
 		}
 
@@ -575,7 +575,7 @@ func (s *SubscriptionService) resolveKeySources(ids []string, report *model.Gene
 	for _, id := range ids {
 		ks, err := s.storage.GetKeySource(id)
 		if err != nil {
-			report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: id, Why: "model.KeySource не найден"})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: id, Why: "KeySource не найден"})
 			continue
 		}
 
@@ -643,7 +643,7 @@ func (s *SubscriptionService) regenerateKeys(keys []model.SubKey, report *model.
 
 		ks, err := s.storage.GetKeySource(*k.KeySourceID)
 		if err != nil {
-			report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: *k.KeySourceID, Why: "model.KeySource не найден — ключ удалён"})
+			report.Items = append(report.Items, model.GenerationReportItem{Kind: "skip", Label: *k.KeySourceID, Why: "KeySource не найден — ключ удалён"})
 			continue
 		}
 		label := ksLabelFor(ks, panelMap)
