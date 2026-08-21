@@ -1,10 +1,29 @@
 const API_BASE = '/api';
+const TOKEN_KEY = 'vlesspanel:token';
+const UNAUTHORIZED_EVENT = 'vlesspanel:unauthorized';
+
+export function getToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
+}
+
+export function setToken(t) {
+  try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {}
+}
+
+function authHeaders() {
+  const t = getToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
 
 async function request(url, options = {}) {
   const res = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...options.headers },
     ...options,
   });
+  if (res.status === 401) {
+    window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+    throw new Error('unauthorized');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `HTTP ${res.status}`);
@@ -33,7 +52,11 @@ export const api = {
   regenerateAllSubscriptions: () => request('/subscriptions/regenerate-all', { method: 'POST' }),
   deleteSubscription: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
   getSubscriptionRaw: async (id) => {
-    const res = await fetch(`${API_BASE}/subscriptions/${id}/raw`);
+    const res = await fetch(`${API_BASE}/subscriptions/${id}/raw`, { headers: authHeaders() });
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+      throw new Error('unauthorized');
+    }
     if (!res.ok) throw new Error('Failed to get raw');
     return res.text();
   },

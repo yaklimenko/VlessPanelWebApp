@@ -300,3 +300,24 @@ type XUIClientSettings struct {
 	ID    string `json:"id"`
 	Level int    `json:"level,omitempty"`
 }
+
+// APIToken represents an issued API token (for bots/agents). Only the SHA-256
+// hash is persisted — the raw token is returned once at creation.
+type APIToken struct {
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	TokenHash string `json:"tokenHash"` // sha256 hex of the raw token (persisted, not exposed in API responses)
+	CreatedAt string `json:"createdAt"`
+}
+
+// CreateTokenRequest is the request body for POST /api/tokens.
+type CreateTokenRequest struct {
+	Label string `json:"label"`
+}
+
+// CreateTokenResponse is the response for POST /api/tokens. The raw token is
+// shown only once.
+type CreateTokenResponse struct {
+	Token    string   `json:"token"`
+	APIToken APIToken `json:"tokenMeta"`
+}

@@ -27,15 +27,17 @@ type Handlers struct {
 	panelAPI *PanelAPI
 	config   Config
 	sync     *SyncState
+	auth     *TokenAuth
 }
 
 // NewHandlers creates a new Handlers instance
-func NewHandlers(storage *Storage, panelAPI *PanelAPI, config Config, sync *SyncState) *Handlers {
+func NewHandlers(storage *Storage, panelAPI *PanelAPI, config Config, sync *SyncState, auth *TokenAuth) *Handlers {
 	return &Handlers{
 		storage:  storage,
 		panelAPI: panelAPI,
 		config:   config,
 		sync:     sync,
+		auth:     auth,
 	}
 }
 
@@ -1627,6 +1629,68 @@ func (h *Handlers) SyncToAggregator(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ─── Tokens ───
+
+// GetAuthStatus сообщает, включена ли аутентификация (без проверки токена).
+// Используется фронтендом, чтобы решить, показывать ли экран входа.
+func (h *Handlers) GetAuthStatus(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]bool{"enabled": h.auth.Enabled()})
+}
+
+// ListTokens возвращает выпущенные API-токены (без raw-токена и без хэша).
+func (h *Handlers) ListTokens(w http.ResponseWriter, r *http.Request) {
+	tokens, err := h.storage.LoadTokens()
+	if err != nil {
+		log.Printf("Error loading tokens: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to load tokens")
+		return
+	}
+	for i := range tokens {
+		tokens[i].TokenHash = ""
+	}
+	respondJSON(w, http.StatusOK, tokens)
+}
+
+// CreateToken выпускает новый API-токен. Raw-токен возвращается один раз.
+func (h *Handlers) CreateToken(w http.ResponseWriter, r *http.Request) {
+	var req CreateTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	raw := newRawToken()
+	tok := APIToken{
+		ID:        "tok-" + randID(),
+		Label:     strings.TrimSpace(req.Label),
+		TokenHash: hashToken(raw),
+		CreatedAt: nowStr(),
+	}
+
+	if err := h.storage.AddToken(tok); err != nil {
+		log.Printf("Error adding token: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to create token")
+		return
+	}
+	h.auth.AddIssued(tok.TokenHash)
+
+	tok.TokenHash = ""
+	respondJSON(w, http.StatusCreated, CreateTokenResponse{Token: raw, APIToken: tok})
+}
+
+// DeleteToken отзывает API-токен по ID.
+func (h *Handlers) DeleteToken(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	tok, err := h.storage.DeleteToken(id)
+	if err != nil {
+		respondError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	h.auth.RemoveIssued(tok.TokenHash)
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "revoked", "id": tok.ID})
+}
+
 // enrichSync sets the sync status of a subscription from the global flag
 // (SyncState): после синка — всё синхронизировано, после изменения файла
 // подписки — требуется синк. Никаких HTTP-запросов к агрегатору.
@@ -1702,6 +1766,15 @@ func randID() string {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b)
+}
+
+// newRawToken генерирует новый API-токен: "vlt_" + 48 hex-символов (192 бит).
+func newRawToken() string {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "vlt_" + fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return "vlt_" + hex.EncodeToString(b)
 }
 
 // validSubscriptionName restricts subscription names to safe file characters.

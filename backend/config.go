@@ -17,6 +17,7 @@ type Config struct {
 	DataDir               string
 	AggregatorURL         string // base URL of the aggregator (for sync status HEAD)
 	SyncScript            string // rsync script to push configs to the aggregator
+	AdminToken            string // master token; empty = auth disabled
 
 	// HTTP-сервер: таймауты и время на graceful shutdown (см. main.go).
 	ReadHeaderTimeout time.Duration
@@ -68,6 +69,8 @@ func LoadConfig() Config {
 		syncScript = "/opt/aggregator-configs/sync-configs.sh"
 	}
 
+	adminToken := os.Getenv("VLESSPANEL_ADMIN_TOKEN")
+
 	return Config{
 		Port:                  port,
 		AggregatorDir:         aggDir,
@@ -77,6 +80,7 @@ func LoadConfig() Config {
 		DataDir:               dataDir,
 		AggregatorURL:         aggURL,
 		SyncScript:            syncScript,
+		AdminToken:            adminToken,
 		ReadHeaderTimeout:     envDuration("VLESSPANEL_READ_HEADER_TIMEOUT", 10*time.Second),
 		ReadTimeout:           envDuration("VLESSPANEL_READ_TIMEOUT", 30*time.Second),
 		WriteTimeout:          envDuration("VLESSPANEL_WRITE_TIMEOUT", 2*time.Minute),

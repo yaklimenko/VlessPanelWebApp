@@ -15,6 +15,7 @@ import (
 //   - panels.json        — list of 3X-UI panels
 //   - key-sources.json   — list of KeySource records
 //   - subscriptions.json — subscription metadata (status, keySourceId refs, updatedAt)
+//   - tokens.json        — issued API tokens (sha256 hashes only)
 //   - aggregatorDir      — generated subscription files configs-{name}.txt
 //
 // Legacy subscriptions (files without metadata) are still readable: their keys
@@ -25,6 +26,7 @@ type Storage struct {
 	aggregatorDir  string
 	keySourcesPath string
 	subsMetaPath   string
+	tokensPath     string
 }
 
 // NewStorage creates a new Storage instance.
@@ -41,6 +43,7 @@ func NewStorage(panelsPath, aggregatorDir, dataDir string) *Storage {
 
 	keySourcesPath := filepath.Join(dataDir, "key-sources.json")
 	subsMetaPath := filepath.Join(dataDir, "subscriptions.json")
+	tokensPath := filepath.Join(dataDir, "tokens.json")
 
 	// Ensure key-sources.json exists
 	if _, err := os.Stat(keySourcesPath); os.IsNotExist(err) {
@@ -54,12 +57,19 @@ func NewStorage(panelsPath, aggregatorDir, dataDir string) *Storage {
 		data, _ := json.MarshalIndent(initial, "", "  ")
 		os.WriteFile(subsMetaPath, data, 0644)
 	}
+	// Ensure tokens.json exists
+	if _, err := os.Stat(tokensPath); os.IsNotExist(err) {
+		initial := []APIToken{}
+		data, _ := json.MarshalIndent(initial, "", "  ")
+		os.WriteFile(tokensPath, data, 0644)
+	}
 
 	return &Storage{
 		panelsPath:     panelsPath,
 		aggregatorDir:  aggregatorDir,
 		keySourcesPath: keySourcesPath,
 		subsMetaPath:   subsMetaPath,
+		tokensPath:     tokensPath,
 	}
 }
 
@@ -439,6 +449,76 @@ func (s *Storage) DeleteSubMeta(name string) error {
 		return nil
 	}
 	return s.saveSubsMetaLocked(subs)
+}
+
+// --- API tokens ---
+
+// loadTokensLocked reads tokens.json. Caller must hold at least RLock.
+func (s *Storage) loadTokensLocked() ([]APIToken, error) {
+	data, err := os.ReadFile(s.tokensPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading tokens file: %w", err)
+	}
+	var tokens []APIToken
+	if err := json.Unmarshal(data, &tokens); err != nil {
+		return nil, fmt.Errorf("parsing tokens file: %w", err)
+	}
+	return tokens, nil
+}
+
+// saveTokensLocked writes tokens.json. Caller must hold Lock.
+func (s *Storage) saveTokensLocked(tokens []APIToken) error {
+	data, err := json.MarshalIndent(tokens, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling tokens: %w", err)
+	}
+	if err := os.WriteFile(s.tokensPath, data, 0644); err != nil {
+		return fmt.Errorf("writing tokens file: %w", err)
+	}
+	return nil
+}
+
+// LoadTokens reads all issued API tokens.
+func (s *Storage) LoadTokens() ([]APIToken, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.loadTokensLocked()
+}
+
+// AddToken appends a new API token (atomic).
+func (s *Storage) AddToken(tok APIToken) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tokens, err := s.loadTokensLocked()
+	if err != nil {
+		return err
+	}
+	tokens = append(tokens, tok)
+	return s.saveTokensLocked(tokens)
+}
+
+// DeleteToken removes an API token by ID and returns it (atomic). The caller
+// uses the returned TokenHash to drop it from the in-memory auth cache.
+func (s *Storage) DeleteToken(id string) (APIToken, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tokens, err := s.loadTokensLocked()
+	if err != nil {
+		return APIToken{}, err
+	}
+	for i := range tokens {
+		if tokens[i].ID == id {
+			tok := tokens[i]
+			tokens = append(tokens[:i], tokens[i+1:]...)
+			if err := s.saveTokensLocked(tokens); err != nil {
+				return APIToken{}, err
+			}
+			return tok, nil
+		}
+	}
+	return APIToken{}, fmt.Errorf("%w: %s", ErrTokenNotFound, id)
 }
 
 // --- Subscription files ---

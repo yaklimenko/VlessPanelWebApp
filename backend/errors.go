@@ -13,6 +13,7 @@ var (
 	ErrKeySourceNotFound       = errors.New("key source not found")
 	ErrSubscriptionNotFound    = errors.New("subscription not found")
 	ErrInvalidSubscriptionName = errors.New("invalid subscription name")
+	ErrTokenNotFound           = errors.New("token not found")
 )
 
 // PanelAPI-семейство (3X-UI).

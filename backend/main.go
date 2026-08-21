@@ -30,17 +30,31 @@ func main() {
 	storage := NewStorage(config.PanelsFilePath, config.AggregatorDir, config.DataDir)
 	panelAPI := NewPanelAPI()
 	syncState := NewSyncState()
-	handlers := NewHandlers(storage, panelAPI, config, syncState)
+	auth := NewTokenAuth(config.AdminToken)
+	if auth.Enabled() {
+		if tokens, err := storage.LoadTokens(); err == nil {
+			hashes := make(map[string]struct{}, len(tokens))
+			for _, t := range tokens {
+				hashes[t.TokenHash] = struct{}{}
+			}
+			auth.SetIssued(hashes)
+		}
+	}
+	handlers := NewHandlers(storage, panelAPI, config, syncState, auth)
 
 	// Router
 	r := chi.NewRouter()
 
 	// Middleware
-	r.Use(corsMiddleware)
 	r.Use(loggingMiddleware)
+
+	// Без аутентификации (на корневом роутере, вне /api-группы с authMiddleware).
+	r.Get("/api/auth-status", handlers.GetAuthStatus)
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
+		r.Use(authMiddleware(auth))
+
 		// Panels
 		r.Get("/panels", handlers.ListPanels)
 		r.Post("/panels", handlers.CreatePanel)
@@ -77,6 +91,14 @@ func main() {
 
 		// Utility
 		r.Get("/vlesssubtest-status", handlers.GetVlessSubTestStatus)
+
+		// API tokens (admin only)
+		r.Route("/tokens", func(r chi.Router) {
+			r.Use(requireAdmin)
+			r.Get("/", handlers.ListTokens)
+			r.Post("/", handlers.CreateToken)
+			r.Delete("/{id}", handlers.DeleteToken)
+		})
 	})
 
 	// Serve static files

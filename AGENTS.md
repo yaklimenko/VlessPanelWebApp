@@ -7,6 +7,16 @@
 
 Примечание: `docker-compose` недоступен, используется `docker compose` (v2). Тег образа, собираемого compose, — `vlesspanelwebapp-vlesspanel:latest` (через дефис), как и в docker run; при расхождении берите фактический тег из вывода build.
 
+## Аутентификация и API-токены
+
+- Auth включается env `VLESSPANEL_ADMIN_TOKEN` (master-токен). Пустой → auth выключен.
+- При включённом auth на `/api` нужен `Authorization: Bearer <токен>`; без него — `401`.
+- Master-токен — полный доступ; выпущенные токены — доступ к panel/subscription/keysource API, но **не** к `/api/tokens` (управление — только master).
+- `GET /api/auth-status` — без auth, сообщает `{"enabled":true|false}` (фронт решает, показывать ли логин).
+- Выпуск/отзыв токенов: `scripts/tokens.sh issue <label> | list | revoke <id>` (нужны `VLESSPANEL_ADMIN_TOKEN` и `VLESSPANEL_BASE`, по умолчанию `http://localhost:9090`).
+- Токены хранятся в `data/tokens.json` **только как sha256-хэш**; raw показывается один раз при выпуске.
+- Для включения auth в deploy добавьте `-e VLESSPANEL_ADMIN_TOKEN=<секрет>` в команду `docker run`.
+
 ## Окружение и точки доступа
 
 - Приложение (VlessPanel): `http://localhost:9090` (проксируется в контейнер `vlesspanel`, порт 8080). Контейнер должен быть Up.
@@ -18,6 +28,8 @@
 ## Тестирование изменений (обязательно перед коммитом)
 
 После любого изменения бэкенда — пересобрать контейнер (см. «Deploy») и проверить **затронутый** функционал энд-ту-энд через curl. Тестовые сущности именовать с префиксом `refac-test-*`, после проверки — удалять.
+
+При включённом auth добавляйте к curl `-H "Authorization: Bearer $VLESSPANEL_ADMIN_TOKEN"` (или используйте выпущенный токен).
 
 ### Маршруты приложения (http://localhost:9090/api)
 
@@ -49,6 +61,10 @@
 - `POST /subscriptions/{id}/test` — тест всех ключей через vlesssubtest.
 - `POST /sync` — rsync-скрипт на агрегатор.
 - `GET  /vlesssubtest-status` — health демона.
+- `GET  /auth-status` — включена ли auth (без токена).
+- `GET  /tokens` — список выпущенных токенов (только master).
+- `POST /tokens` — выпустить токен (только master, body: `{label}`) → `{token (raw), tokenMeta}`.
+- `DELETE /tokens/{id}` — отозвать токен (только master).
 
 ### Прямой доступ к 3X-UI (для очистки тестовых клиентов)
 
@@ -100,14 +116,13 @@ curl -sk -X POST -H "Authorization: Bearer $TOK" "$URL/panel/api/clients/del/$EM
 
 ## Известные архитектурные слабости (контекст для рефакторинга)
 
-Подробности — в архитектурном ревью (см. историю чата). Кратко:
-- Весь backend в `package main`, god file `handlers.go` (1720 строк), нет слоёв transport/service/repository.
-- TOCTOU-гонки в `Storage` (read-modify-write в двух разных блокировках).
-- Дублирование поиска панели (10+ хендлеров).
-- Ошибки — строки, `strings.Contains`-диспетчеризация статусов.
-- Циклическая зависимость Storage ↔ Handlers через `SetOnChange`.
-- VlessSubTest-клиент создаётся ad-hoc в 3 местах.
+Подробности — в архитектурном ревью (см. историю чата). Кратко (актуально на текущий момент):
+- Весь backend в `package main`, god file `handlers.go` (~1800 строк), нет слоёв transport/service/repository.
+- VlessSubTest-клиент создаётся ad-hoc в 2 местах (`TestSubscription`, `TestKeySource`).
 - `SyncToAggregator` дёргает shell-скрипт прямо из хендлера.
-- Frontend: `App.jsx` (858 строк, complexity 67) и `components/index.jsx` (677 строк) — god files.
-- HTTP-сервер без таймаутов/graceful shutdown, CORS `*`, нет auth, `InsecureSkipVerify` всегда.
-- Тестов ноль.
+- Frontend: `App.jsx` (~900 строк, complexity 67) и `components/index.jsx` (677 строк) — god files.
+- `InsecureSkipVerify: true` для всех панелей без per-panel флага.
+- Двуязычные сообщения (English + Russian) без i18n-стратегии.
+- Хардкод прод-URL `https://example.com` в `config.go`.
+
+Уже исправлено в этой ветке: TOCTOU-гонки, `strings.Contains`-диспетчеризация ошибок, цикл Storage↔Handlers (SetOnChange), path traversal, таймауты/graceful shutdown HTTP-сервера, CORS `*`, базовая auth (bearer-token + выпуск токенов), параллельный regenerate-all. Добавлены unit-тесты (`storage_test.go`, `panelapi_test.go`, `auth_test.go`).
