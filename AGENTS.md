@@ -119,7 +119,6 @@ curl -sk -X POST -H "Authorization: Bearer $TOK" "$URL/panel/api/clients/del/$EM
 ## Известные архитектурные слабости (контекст для рефакторинга)
 
 Осталось (актуально на текущий момент):
-- Frontend — god files: `App.jsx` (~900 строк, complexity 67) и `components/index.jsx` (~680 строк, все компоненты в одном файле). — пункт 14.
-- Сервисы/storage/handlers всё ещё в `package main` (типы вынесены в `model`/`dto`/`xui`, но сами слои не в подпакетах).
+- Сервисы/storage/handlers всё ещё в `package main` (типы вынесены в `model`/`dto`/`xui`, но сами слои не в подпакетах). При желании можно разнести `service`/`storage`/`panelapi`/`handlers` по подпакетам.
 
-Уже исправлено в этой ветке: TOCTOU-гонки, `strings.Contains`-диспетчеризация ошибок, цикл Storage↔Handlers (SetOnChange), path traversal, таймауты/graceful shutdown HTTP-сервера, CORS `*`, auth (bearer-token + выпуск токенов), параллельный regenerate-all, service/use-case слой, интерфейсы (Repository/PanelClient/VlessSubTestClient/AggregatorSyncer), разнесение типов по пакетам, per-panel `insecureSkipVerify`, i18n (единый русский), хардкод прод-URL (вынесен в `VLESSPANEL_PUBLIC_URL`). Добавлены unit-тесты сервисов/хранилища/панелей/авторизации.
+Уже исправлено в этой ветке: TOCTOU-гонки, `strings.Contains`-диспетчеризация ошибок, цикл Storage↔Handlers (SetOnChange), path traversal, таймауты/graceful shutdown HTTP-сервера, CORS `*`, auth (bearer-token + выпуск токенов), параллельный regenerate-all, service/use-case слой, интерфейсы (Repository/PanelClient/VlessSubTestClient/AggregatorSyncer), разнесение типов по пакетам, per-panel `insecureSkipVerify`, i18n (единый русский), хардкод прод-URL (вынесен в `VLESSPANEL_PUBLIC_URL`), frontend god files (компоненты по файлам + `useVlessPanel`). Добавлены unit-тесты сервисов/хранилища/панелей/авторизации.
