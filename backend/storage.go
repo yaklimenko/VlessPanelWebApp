@@ -80,11 +80,8 @@ func (s *Storage) GetPanel(id string) (Panel, error) {
 	return Panel{}, fmt.Errorf("%w: %s", ErrPanelNotFound, id)
 }
 
-// LoadPanels reads all panels from panels.json
-func (s *Storage) LoadPanels() ([]Panel, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+// loadPanelsLocked reads panels.json. Caller must hold at least RLock.
+func (s *Storage) loadPanelsLocked() ([]Panel, error) {
 	data, err := os.ReadFile(s.panelsPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading panels file: %w", err)
@@ -98,11 +95,8 @@ func (s *Storage) LoadPanels() ([]Panel, error) {
 	return panels, nil
 }
 
-// SavePanels writes panels to panels.json
-func (s *Storage) SavePanels(panels []Panel) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+// savePanelsLocked writes panels.json. Caller must hold Lock.
+func (s *Storage) savePanelsLocked(panels []Panel) error {
 	data, err := json.MarshalIndent(panels, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling panels: %w", err)
@@ -115,16 +109,26 @@ func (s *Storage) SavePanels(panels []Panel) error {
 	return nil
 }
 
-// AddPanel adds a new panel and returns it with an assigned ID
+// LoadPanels reads all panels from panels.json
+func (s *Storage) LoadPanels() ([]Panel, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.loadPanelsLocked()
+}
+
+// AddPanel adds a new panel and returns it with an assigned ID. The whole
+// read-modify-write (load → unique-id → append → save) is atomic under one lock.
 func (s *Storage) AddPanel(req CreatePanelRequest) (Panel, error) {
-	panels, err := s.LoadPanels()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	panels, err := s.loadPanelsLocked()
 	if err != nil {
 		return Panel{}, err
 	}
 
-	// Generate ID from name
+	// Generate ID from name, make unique.
 	id := strings.ToLower(strings.ReplaceAll(req.Name, " ", "-"))
-	// Make unique
 	baseID := id
 	for i := 1; ; i++ {
 		exists := false
@@ -149,16 +153,19 @@ func (s *Storage) AddPanel(req CreatePanelRequest) (Panel, error) {
 	}
 
 	panels = append(panels, panel)
-	if err := s.SavePanels(panels); err != nil {
+	if err := s.savePanelsLocked(panels); err != nil {
 		return Panel{}, err
 	}
 
 	return panel, nil
 }
 
-// DeletePanel removes a panel by ID
+// DeletePanel removes a panel by ID (atomic read-modify-write).
 func (s *Storage) DeletePanel(id string) error {
-	panels, err := s.LoadPanels()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	panels, err := s.loadPanelsLocked()
 	if err != nil {
 		return err
 	}
@@ -176,16 +183,13 @@ func (s *Storage) DeletePanel(id string) error {
 		return fmt.Errorf("%w: %s", ErrPanelNotFound, id)
 	}
 
-	return s.SavePanels(panels)
+	return s.savePanelsLocked(panels)
 }
 
 // --- Key Sources ---
 
-// LoadKeySources reads all KeySources from key-sources.json
-func (s *Storage) LoadKeySources() ([]KeySource, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+// loadKeySourcesLocked reads key-sources.json. Caller must hold at least RLock.
+func (s *Storage) loadKeySourcesLocked() ([]KeySource, error) {
 	data, err := os.ReadFile(s.keySourcesPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading key sources file: %w", err)
@@ -199,11 +203,8 @@ func (s *Storage) LoadKeySources() ([]KeySource, error) {
 	return sources, nil
 }
 
-// SaveKeySources writes KeySources to key-sources.json
-func (s *Storage) SaveKeySources(sources []KeySource) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+// saveKeySourcesLocked writes key-sources.json. Caller must hold Lock.
+func (s *Storage) saveKeySourcesLocked(sources []KeySource) error {
 	data, err := json.MarshalIndent(sources, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling key sources: %w", err)
@@ -214,6 +215,13 @@ func (s *Storage) SaveKeySources(sources []KeySource) error {
 	}
 
 	return nil
+}
+
+// LoadKeySources reads all KeySources from key-sources.json
+func (s *Storage) LoadKeySources() ([]KeySource, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.loadKeySourcesLocked()
 }
 
 // GetKeySource returns a KeySource by ID.
@@ -231,9 +239,48 @@ func (s *Storage) GetKeySource(id string) (*KeySource, error) {
 	return nil, fmt.Errorf("%w: %s", ErrKeySourceNotFound, id)
 }
 
-// UpdateKeySource replaces a KeySource by ID.
+// AddKeySource appends a new KeySource unless a duplicate of the same type
+// already exists (panel: same panel/email/inbound triplet; manual: same link).
+// The dedup check and append are atomic. Returns (existing, true) when a
+// duplicate is found, otherwise (new, false).
+func (s *Storage) AddKeySource(ks KeySource) (*KeySource, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sources, err := s.loadKeySourcesLocked()
+	if err != nil {
+		return nil, false, err
+	}
+
+	for i := range sources {
+		existing := &sources[i]
+		if ks.Type == "panel" {
+			if existing.Type == "panel" && existing.PanelID == ks.PanelID &&
+				existing.ClientEmail == ks.ClientEmail && existing.InboundID == ks.InboundID {
+				dup := sources[i]
+				return &dup, true, nil
+			}
+		} else {
+			if existing.Type == "manual" && strings.TrimSpace(existing.VlessLink) == strings.TrimSpace(ks.VlessLink) {
+				dup := sources[i]
+				return &dup, true, nil
+			}
+		}
+	}
+
+	sources = append(sources, ks)
+	if err := s.saveKeySourcesLocked(sources); err != nil {
+		return nil, false, err
+	}
+	return &ks, false, nil
+}
+
+// UpdateKeySource replaces a KeySource by ID (atomic read-modify-write).
 func (s *Storage) UpdateKeySource(updated KeySource) error {
-	sources, err := s.LoadKeySources()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sources, err := s.loadKeySourcesLocked()
 	if err != nil {
 		return err
 	}
@@ -248,12 +295,15 @@ func (s *Storage) UpdateKeySource(updated KeySource) error {
 	if !found {
 		return fmt.Errorf("%w: %s", ErrKeySourceNotFound, updated.ID)
 	}
-	return s.SaveKeySources(sources)
+	return s.saveKeySourcesLocked(sources)
 }
 
-// DeleteKeySource removes a KeySource by ID.
+// DeleteKeySource removes a KeySource by ID (atomic read-modify-write).
 func (s *Storage) DeleteKeySource(id string) error {
-	sources, err := s.LoadKeySources()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sources, err := s.loadKeySourcesLocked()
 	if err != nil {
 		return err
 	}
@@ -268,37 +318,7 @@ func (s *Storage) DeleteKeySource(id string) error {
 	if !found {
 		return fmt.Errorf("%w: %s", ErrKeySourceNotFound, id)
 	}
-	return s.SaveKeySources(sources)
-}
-
-// FindDuplicatePanel finds an existing panel-type KeySource with the same triplet.
-func (s *Storage) FindDuplicatePanel(panelID, email string, inboundID int) *KeySource {
-	sources, err := s.LoadKeySources()
-	if err != nil {
-		return nil
-	}
-	for i := range sources {
-		ks := &sources[i]
-		if ks.Type == "panel" && ks.PanelID == panelID && ks.ClientEmail == email && ks.InboundID == inboundID {
-			return ks
-		}
-	}
-	return nil
-}
-
-// FindDuplicateManual finds an existing manual KeySource with the same vless link.
-func (s *Storage) FindDuplicateManual(vlessLink string) *KeySource {
-	sources, err := s.LoadKeySources()
-	if err != nil {
-		return nil
-	}
-	for i := range sources {
-		ks := &sources[i]
-		if ks.Type == "manual" && strings.TrimSpace(ks.VlessLink) == strings.TrimSpace(vlessLink) {
-			return ks
-		}
-	}
-	return nil
+	return s.saveKeySourcesLocked(sources)
 }
 
 // --- Subscription metadata ---
@@ -324,11 +344,8 @@ func (s *Storage) LoadSubscriptionsMeta() ([]Subscription, error) {
 	return subs, nil
 }
 
-// SaveSubscriptionsMeta writes subscription metadata.
-func (s *Storage) SaveSubscriptionsMeta(subs []Subscription) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+// saveSubsMetaLocked writes subscriptions.json. Caller must hold Lock.
+func (s *Storage) saveSubsMetaLocked(subs []Subscription) error {
 	data, err := json.MarshalIndent(subs, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling subscriptions meta: %w", err)
@@ -354,9 +371,12 @@ func (s *Storage) GetSubMeta(name string) (*Subscription, bool) {
 	return nil, false
 }
 
-// UpsertSubMeta inserts or replaces subscription metadata by name.
+// UpsertSubMeta inserts or replaces subscription metadata by name (atomic).
 func (s *Storage) UpsertSubMeta(sub Subscription) error {
-	subs, err := s.LoadSubscriptionsMeta()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	subs, err := s.loadSubsMetaLocked()
 	if err != nil {
 		return err
 	}
@@ -371,12 +391,15 @@ func (s *Storage) UpsertSubMeta(sub Subscription) error {
 	if !found {
 		subs = append(subs, sub)
 	}
-	return s.SaveSubscriptionsMeta(subs)
+	return s.saveSubsMetaLocked(subs)
 }
 
-// DeleteSubMeta removes subscription metadata by name.
+// DeleteSubMeta removes subscription metadata by name (atomic).
 func (s *Storage) DeleteSubMeta(name string) error {
-	subs, err := s.LoadSubscriptionsMeta()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	subs, err := s.loadSubsMetaLocked()
 	if err != nil {
 		return err
 	}
@@ -391,7 +414,7 @@ func (s *Storage) DeleteSubMeta(name string) error {
 	if !found {
 		return nil
 	}
-	return s.SaveSubscriptionsMeta(subs)
+	return s.saveSubsMetaLocked(subs)
 }
 
 // --- Subscription files ---

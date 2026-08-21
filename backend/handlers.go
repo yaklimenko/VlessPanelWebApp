@@ -859,21 +859,6 @@ func (h *Handlers) CreateKeySource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Dedup within type.
-	var existing *KeySource
-	if req.Type == "panel" {
-		existing = h.storage.FindDuplicatePanel(req.PanelID, req.ClientEmail, req.InboundID)
-	} else {
-		existing = h.storage.FindDuplicateManual(req.VlessLink)
-	}
-	if existing != nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{
-			"keySource": existing,
-			"deduped":   true,
-		})
-		return
-	}
-
 	now := nowStr()
 	ks := KeySource{
 		ID:          "ks-" + randID(),
@@ -890,14 +875,18 @@ func (h *Handlers) CreateKeySource(w http.ResponseWriter, r *http.Request) {
 		ks.Label = labelFromVless(ks.VlessLink)
 	}
 
-	sources, err := h.storage.LoadKeySources()
+	// Dedup + append атомарно (одна блокировка), чтобы два конкурентных
+	// запроса с одинаковым триплетом/ссылкой не создали дубликат.
+	existing, deduped, err := h.storage.AddKeySource(ks)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to load key sources")
+		respondError(w, http.StatusInternalServerError, "Failed to save key source")
 		return
 	}
-	sources = append(sources, ks)
-	if err := h.storage.SaveKeySources(sources); err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to save key source")
+	if deduped {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"keySource": existing,
+			"deduped":   true,
+		})
 		return
 	}
 
