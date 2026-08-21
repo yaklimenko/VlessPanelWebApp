@@ -323,3 +323,93 @@ type CreateTokenResponse struct {
 	Token    string   `json:"token"`
 	APIToken APIToken `json:"tokenMeta"`
 }
+
+// --- Response DTOs (service layer returns these; handlers only encode) ---
+
+// StatusResponse — простой ack для операций с клиентами/панелями/токенами.
+type StatusResponse struct {
+	Status string `json:"status"`
+	Email  string `json:"email,omitempty"`
+	ID     string `json:"id,omitempty"`
+}
+
+// SimpleInbound — упрощённое представление инбаунда для ListInbounds.
+type SimpleInbound struct {
+	ID       int    `json:"id"`
+	Remark   string `json:"remark"`
+	Port     int    `json:"port"`
+	Protocol string `json:"protocol"`
+	Enable   bool   `json:"enable"`
+}
+
+// UpdateSubscriptionResult — результат UpdateSubscription. Generate не nil
+// только для режима regenerate.
+type UpdateSubscriptionResult struct {
+	Subscription Subscription
+	Generate     *SubscriptionGenerateResponse
+}
+
+// RegenerateSubResult — одна строка отчёта RegenerateAll.
+type RegenerateSubResult struct {
+	Name        string `json:"name"`
+	Regenerated bool   `json:"regenerated"`
+	Reason      string `json:"reason,omitempty"`
+	Included    int    `json:"included,omitempty"`
+	SkippedKeys int    `json:"skippedKeys,omitempty"`
+}
+
+// RegenerateAllResponse — отчёт RegenerateAllSubscriptions.
+type RegenerateAllResponse struct {
+	Regenerated int                   `json:"regenerated"`
+	Skipped     int                   `json:"skipped"`
+	Results     []RegenerateSubResult `json:"results"`
+}
+
+// CreateKeySourceResponse — ответ CreateKeySource (dedup или создание).
+type CreateKeySourceResponse struct {
+	KeySource *KeySource `json:"keySource"`
+	Deduped   bool       `json:"deduped"`
+}
+
+// DeleteKeySourceResponse — отчёт DeleteKeySource (каскадная чистка).
+type DeleteKeySourceResponse struct {
+	Status              string   `json:"status"`
+	Label               string   `json:"label"`
+	UsedInSubscriptions int      `json:"usedInSubscriptions"`
+	Subscriptions       []string `json:"subscriptions"`
+}
+
+// KeySourceKeyResponse — ответ GetKeySourceKey (свежий ключ + обновлённый source).
+type KeySourceKeyResponse struct {
+	Key    VLESSKey   `json:"key"`
+	Source *KeySource `json:"source"`
+}
+
+// KeySourceTestResponse — ответ TestKeySource.
+type KeySourceTestResponse struct {
+	Result   *TestSingleResponse `json:"result"`
+	LastTest *KeySourceTest      `json:"lastTest"`
+	Error    string              `json:"error,omitempty"`
+}
+
+// KeySourceTrafficResponse — ответ GetKeySourceTraffic.
+type KeySourceTrafficResponse struct {
+	Up         int64 `json:"up"`
+	Down       int64 `json:"down"`
+	ExpiryTime int64 `json:"expiryTime"`
+	Enable     bool  `json:"enable"`
+}
+
+// VlessSubTestStatus — ответ GetVlessSubTestStatus.
+type VlessSubTestStatus struct {
+	Available bool   `json:"available"`
+	DaemonURL string `json:"daemonURL"`
+	Error     string `json:"error,omitempty"`
+}
+
+// SyncResponse — ответ SyncToAggregator.
+type SyncResponse struct {
+	Status string `json:"status"`
+	Output string `json:"output,omitempty"`
+	Error  string `json:"error,omitempty"`
+}

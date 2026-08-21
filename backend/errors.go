@@ -1,6 +1,9 @@
 package main
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Sentinel-ошибки для типовой диспетчеризации через errors.Is.
 // Текст ошибок остаётся человекочитаемым (исходные сообщения сохранены),
@@ -22,3 +25,41 @@ var (
 	ErrInboundNotFound  = errors.New("inbound not found on panel")
 	ErrPanelUnreachable = errors.New("panel unreachable")
 )
+
+// AppError — ошибка уровня use-case, несущая HTTP-статус и user-facing
+// сообщение. Сервисы возвращают *AppError для доменных/валидационных ошибок,
+// не завися от net/http в самих сервисах (статус — просто int).
+type AppError struct {
+	Status  int
+	Message string
+}
+
+func (e *AppError) Error() string { return e.Message }
+
+func appErr(status int, format string, a ...interface{}) *AppError {
+	return &AppError{Status: status, Message: fmt.Sprintf(format, a...)}
+}
+
+func errNotFound(format string, a ...interface{}) *AppError {
+	return appErr(404, format, a...)
+}
+
+func errBadRequest(format string, a ...interface{}) *AppError {
+	return appErr(400, format, a...)
+}
+
+func errConflict(format string, a ...interface{}) *AppError {
+	return appErr(409, format, a...)
+}
+
+func errBadGateway(format string, a ...interface{}) *AppError {
+	return appErr(502, format, a...)
+}
+
+func errNotImplemented(format string, a ...interface{}) *AppError {
+	return appErr(501, format, a...)
+}
+
+func errInternal(format string, a ...interface{}) *AppError {
+	return appErr(500, format, a...)
+}

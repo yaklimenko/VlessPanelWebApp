@@ -40,7 +40,16 @@ func main() {
 			auth.SetIssued(hashes)
 		}
 	}
-	handlers := NewHandlers(storage, panelAPI, config, syncState, auth)
+
+	// Services (use-case layer).
+	daemon := NewDaemonService(config.VlessSubTestDaemonURL)
+	panels := NewPanelService(storage, panelAPI)
+	subscriptions := NewSubscriptionService(storage, panelAPI, syncState, config.VlessSubTestDaemonURL)
+	keySources := NewKeySourceService(storage, panelAPI, syncState, config.VlessSubTestDaemonURL)
+	syncSvc := NewSyncService(syncState, config.SyncScript)
+	tokens := NewTokenService(storage, auth)
+
+	handlers := NewHandlers(auth, panels, subscriptions, keySources, syncSvc, tokens, daemon)
 
 	// Router
 	r := chi.NewRouter()
