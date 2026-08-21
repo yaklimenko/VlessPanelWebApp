@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 )
@@ -136,5 +137,59 @@ func TestUpsertSubMetaConcurrentNoLostUpdate(t *testing.T) {
 	}
 	if len(subs) != n {
 		t.Fatalf("expected %d subscriptions persisted, got %d (lost update)", n, len(subs))
+	}
+}
+
+// Имена, способные выйти за пределы aggregatorDir (path traversal), должны
+// отвергаться на уровне storage (defense in depth), не трогая файлы вне каталога.
+func TestSubscriptionFileRejectsUnsafeNames(t *testing.T) {
+	dir := t.TempDir()
+	aggDir := dir + "/agg"
+	s := NewStorage(dir+"/panels.json", aggDir, dir+"/data")
+
+	victim := dir + "/victim.txt"
+	if err := os.WriteFile(victim, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	unsafe := []string{
+		"/../../victim",
+		"../victim",
+		"a/b",
+		"..",
+		".",
+		"a..b",
+		"",
+		"x/",
+	}
+	for _, name := range unsafe {
+		if _, err := s.GetSubscriptionRaw(name); err == nil {
+			t.Errorf("GetSubscriptionRaw(%q) should be rejected", name)
+		}
+		if err := s.WriteSubscriptionFile(name, []SubKey{{Link: "vless://x"}}); err == nil {
+			t.Errorf("WriteSubscriptionFile(%q) should be rejected", name)
+		}
+		if err := s.RemoveSubscriptionFile(name); err == nil {
+			t.Errorf("RemoveSubscriptionFile(%q) should be rejected", name)
+		}
+		if s.SubscriptionFileExists(name) {
+			t.Errorf("SubscriptionFileExists(%q) should be false", name)
+		}
+	}
+
+	data, err := os.ReadFile(victim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "secret" {
+		t.Fatalf("victim file was modified/deleted: %q", string(data))
+	}
+
+	// Валидное имя по-прежнему работает.
+	if err := s.WriteSubscriptionFile("ok-name", []SubKey{{Link: "vless://x"}}); err != nil {
+		t.Fatalf("valid name rejected: %v", err)
+	}
+	if raw, err := s.GetSubscriptionRaw("ok-name"); err != nil || raw != "vless://x\n" {
+		t.Fatalf("valid read failed: %q, %v", raw, err)
 	}
 }

@@ -419,16 +419,26 @@ func (s *Storage) DeleteSubMeta(name string) error {
 
 // --- Subscription files ---
 
-// subscriptionFile returns the path for a subscription file.
-func (s *Storage) subscriptionFile(name string) string {
-	return filepath.Join(s.aggregatorDir, "configs-"+name+".txt")
+// subscriptionFile returns the path for a subscription file. The name is
+// validated so it cannot escape aggregatorDir (defense in depth: read/delete
+// handlers already validate, but no future caller may silently bypass it).
+func (s *Storage) subscriptionFile(name string) (string, error) {
+	if !validSubscriptionName(name) {
+		return "", fmt.Errorf("%w: %s", ErrInvalidSubscriptionName, name)
+	}
+	return filepath.Join(s.aggregatorDir, "configs-"+name+".txt"), nil
 }
 
 // SubscriptionFileExists reports whether the file for name exists.
+// Invalid names report false.
 func (s *Storage) SubscriptionFileExists(name string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	_, err := os.Stat(s.subscriptionFile(name))
+	path, err := s.subscriptionFile(name)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
 	return err == nil
 }
 
@@ -436,6 +446,11 @@ func (s *Storage) SubscriptionFileExists(name string) bool {
 func (s *Storage) WriteSubscriptionFile(name string, keys []SubKey) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	path, err := s.subscriptionFile(name)
+	if err != nil {
+		return err
+	}
 
 	var lines []string
 	for _, k := range keys {
@@ -445,7 +460,7 @@ func (s *Storage) WriteSubscriptionFile(name string, keys []SubKey) error {
 	if content != "" {
 		content += "\n"
 	}
-	if err := os.WriteFile(s.subscriptionFile(name), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing subscription file: %w", err)
 	}
 	return nil
@@ -455,7 +470,15 @@ func (s *Storage) WriteSubscriptionFile(name string, keys []SubKey) error {
 func (s *Storage) RenameSubscriptionFile(oldName, newName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := os.Rename(s.subscriptionFile(oldName), s.subscriptionFile(newName)); err != nil {
+	oldPath, err := s.subscriptionFile(oldName)
+	if err != nil {
+		return err
+	}
+	newPath, err := s.subscriptionFile(newName)
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(oldPath, newPath); err != nil {
 		return fmt.Errorf("renaming subscription file: %w", err)
 	}
 	return nil
@@ -465,17 +488,26 @@ func (s *Storage) RenameSubscriptionFile(oldName, newName string) error {
 func (s *Storage) RemoveSubscriptionFile(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := os.Remove(s.subscriptionFile(name)); err != nil && !os.IsNotExist(err) {
+	path, err := s.subscriptionFile(name)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("removing subscription file: %w", err)
 	}
 	return nil
 }
 
-// SubscriptionFileMtime returns the file mtime as RFC3339, or "" if missing.
+// SubscriptionFileMtime returns the file mtime as RFC3339, or "" if missing
+// or the name is invalid.
 func (s *Storage) SubscriptionFileMtime(name string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	info, err := os.Stat(s.subscriptionFile(name))
+	path, err := s.subscriptionFile(name)
+	if err != nil {
+		return ""
+	}
+	info, err := os.Stat(path)
 	if err != nil {
 		return ""
 	}
@@ -661,7 +693,10 @@ func (s *Storage) GetSubscriptionRaw(name string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	filePath := s.subscriptionFile(name)
+	filePath, err := s.subscriptionFile(name)
+	if err != nil {
+		return "", err
+	}
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -622,6 +622,11 @@ func (h *Handlers) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
+	if !validSubscriptionName(id) {
+		respondError(w, http.StatusBadRequest, "имя может содержать только буквы, цифры, _ и -")
+		return
+	}
+
 	if !h.storage.SubscriptionFileExists(id) {
 		if _, ok := h.storage.GetSubMeta(id); !ok {
 			respondError(w, http.StatusNotFound, fmt.Sprintf("subscription %s not found", id))
@@ -645,6 +650,11 @@ func (h *Handlers) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 // GetSubscriptionRaw returns raw file content
 func (h *Handlers) GetSubscriptionRaw(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+
+	if !validSubscriptionName(id) {
+		respondError(w, http.StatusBadRequest, "имя может содержать только буквы, цифры, _ и -")
+		return
+	}
 
 	content, err := h.storage.GetSubscriptionRaw(id)
 	if err != nil {

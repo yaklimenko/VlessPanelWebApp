@@ -9,9 +9,10 @@ import "errors"
 
 // Storage-семейство.
 var (
-	ErrPanelNotFound        = errors.New("panel not found")
-	ErrKeySourceNotFound    = errors.New("key source not found")
-	ErrSubscriptionNotFound = errors.New("subscription not found")
+	ErrPanelNotFound           = errors.New("panel not found")
+	ErrKeySourceNotFound       = errors.New("key source not found")
+	ErrSubscriptionNotFound    = errors.New("subscription not found")
+	ErrInvalidSubscriptionName = errors.New("invalid subscription name")
 )
 
 // PanelAPI-семейство (3X-UI).
