@@ -315,6 +315,11 @@ input, button, select, textarea { font-family: inherit; font-size: inherit; colo
 }
 .form-group input:focus,
 .form-group select:focus { border-color: var(--accent); }
+.check-label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text); cursor: pointer;
+}
+.check-label input { width: auto; }
 .form-hint {
   font-size: 12px; color: var(--text-secondary); font-style: italic;
 }

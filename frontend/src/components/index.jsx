@@ -489,11 +489,12 @@ export function AddPanelModal({ onClose, onSubmit }) {
   const [url, setUrl] = React.useState('');
   const [token, setToken] = React.useState('');
   const [webBasePath, setWebBasePath] = React.useState('');
+  const [skipVerify, setSkipVerify] = React.useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name || !url || !token) return;
-    onSubmit({ name, url: url.replace(/\/+$/, ''), token, webBasePath: webBasePath.replace(/\/+$/, '') });
+    onSubmit({ name, url: url.replace(/\/+$/, ''), token, webBasePath: webBasePath.replace(/\/+$/, ''), insecureSkipVerify: skipVerify });
   };
 
   return (
@@ -514,6 +515,12 @@ export function AddPanelModal({ onClose, onSubmit }) {
         <div className="form-group">
           <label>Token</label>
           <input type="text" value={token} onChange={e => setToken(e.target.value)} placeholder="Bearer token" required />
+        </div>
+        <div className="form-group form-check">
+          <label className="check-label">
+            <input type="checkbox" checked={skipVerify} onChange={e => setSkipVerify(e.target.checked)} />
+            Пропустить проверку TLS (self-signed)
+          </label>
         </div>
         <div className="modal-actions">
           <button type="submit" className="btn btn-primary">➕ Добавить</button>

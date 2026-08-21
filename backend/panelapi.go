@@ -17,21 +17,33 @@ import (
 
 // PanelAPI handles communication with 3X-UI panels
 type PanelAPI struct {
-	client *http.Client
+	secure   *http.Client // верификация TLS ВКЛ (дефолт)
+	insecure *http.Client // InsecureSkipVerify для self-signed панелей
 }
 
 // NewPanelAPI creates a new PanelAPI.
 // The timeout is 10 seconds per operation with 3X-UI (per spec).
 func NewPanelAPI() *PanelAPI {
+	secure := &http.Client{Timeout: 10 * time.Second}
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
-	return &PanelAPI{
-		client: &http.Client{
-			Transport: tr,
-			Timeout:   10 * time.Second,
-		},
+	insecure := &http.Client{
+		Transport: tr,
+		Timeout:   10 * time.Second,
 	}
+	return &PanelAPI{
+		secure:   secure,
+		insecure: insecure,
+	}
+}
+
+// clientFor возвращает клиент в зависимости от per-panel флага TLS-верификации.
+func (api *PanelAPI) clientFor(panel Panel) *http.Client {
+	if panel.InsecureSkipVerify {
+		return api.insecure
+	}
+	return api.secure
 }
 
 // buildURL constructs the full API URL for a panel endpoint
@@ -44,21 +56,22 @@ func (api *PanelAPI) buildURL(panel Panel, path string) string {
 }
 
 // doRequest performs an HTTP request to a 3X-UI panel.
-// Network-level failures (timeout, connection refused, DNS, TLS, EOF) are
-// wrapped as ErrPanelUnreachable so callers can dispatch via errors.Is
-// instead of strings.Contains-парсинга.
-func (api *PanelAPI) doRequest(method, url, token string, body io.Reader) (*http.Response, error) {
+// The client is chosen per-panel (TLS verification on/off). Network-level
+// failures (timeout, connection refused, DNS, TLS, EOF) are wrapped as
+// ErrPanelUnreachable so callers can dispatch via errors.Is instead of
+// strings.Contains-парсинга.
+func (api *PanelAPI) doRequest(method, url string, panel Panel, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer "+panel.Token)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := api.client.Do(req)
+	resp, err := api.clientFor(panel).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrPanelUnreachable, err)
 	}
@@ -92,7 +105,7 @@ func (api *PanelAPI) parseResponse(resp *http.Response) (*XUIResponse, error) {
 func (api *PanelAPI) ListInbounds(panel Panel) ([]XUIInbound, error) {
 	url := api.buildURL(panel, "panel/api/inbounds/list")
 
-	resp, err := api.doRequest("GET", url, panel.Token, nil)
+	resp, err := api.doRequest("GET", url, panel, nil)
 	if err != nil {
 		return nil, fmt.Errorf("listing inbounds: %w", err)
 	}
@@ -125,7 +138,7 @@ func (api *PanelAPI) ListInbounds(panel Panel) ([]XUIInbound, error) {
 func (api *PanelAPI) fetchXUIClients(panel Panel) ([]XUIClient, error) {
 	url := api.buildURL(panel, "panel/api/clients/list")
 
-	resp, err := api.doRequest("GET", url, panel.Token, nil)
+	resp, err := api.doRequest("GET", url, panel, nil)
 	if err != nil {
 		return nil, fmt.Errorf("listing clients (direct): %w", err)
 	}
@@ -333,7 +346,7 @@ func clientsFromInbounds(inbounds []XUIInbound) []Client {
 func (api *PanelAPI) GetClientLinks(panel Panel, email string) (map[int]string, error) {
 	_url := api.buildURL(panel, "panel/api/clients/links/"+url.PathEscape(email))
 
-	resp, err := api.doRequest("GET", _url, panel.Token, nil)
+	resp, err := api.doRequest("GET", _url, panel, nil)
 	if err != nil {
 		return nil, fmt.Errorf("fetching client links: %w", err)
 	}
@@ -570,7 +583,7 @@ func (api *PanelAPI) CreateClient(panel Panel, inboundID int, email string, expi
 		return fmt.Errorf("marshaling payload: %w", err)
 	}
 
-	resp, err := api.doRequest("POST", url, panel.Token, bytes.NewReader(body))
+	resp, err := api.doRequest("POST", url, panel, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
 	}
@@ -609,7 +622,7 @@ func (api *PanelAPI) AttachClient(panel Panel, email string, inboundID int) erro
 		return fmt.Errorf("marshaling payload: %w", err)
 	}
 
-	resp, err := api.doRequest("POST", _url, panel.Token, bytes.NewReader(body))
+	resp, err := api.doRequest("POST", _url, panel, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("attaching client to inbound: %w", err)
 	}
@@ -659,7 +672,7 @@ func (api *PanelAPI) SetClientFlow(panel Panel, email string, inboundID int) err
 		return fmt.Errorf("marshaling flow payload: %w", err)
 	}
 
-	resp, err := api.doRequest("POST", _url, panel.Token, bytes.NewReader(body))
+	resp, err := api.doRequest("POST", _url, panel, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("setting flow on inbound: %w", err)
 	}
@@ -689,7 +702,7 @@ func (api *PanelAPI) DetachClient(panel Panel, email string, inboundID int) erro
 		return fmt.Errorf("marshaling payload: %w", err)
 	}
 
-	resp, err := api.doRequest("POST", _url, panel.Token, bytes.NewReader(body))
+	resp, err := api.doRequest("POST", _url, panel, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("detaching client from inbound: %w", err)
 	}
@@ -727,7 +740,7 @@ func (api *PanelAPI) UpdateClient(panel Panel, email string, expiryTime int64) e
 		return fmt.Errorf("marshaling payload: %w", err)
 	}
 
-	resp, err := api.doRequest("POST", _url, panel.Token, bytes.NewReader(body))
+	resp, err := api.doRequest("POST", _url, panel, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("updating client: %w", err)
 	}

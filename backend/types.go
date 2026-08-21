@@ -4,11 +4,12 @@ import "encoding/json"
 
 // Panel represents a 3X-UI panel configuration
 type Panel struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	URL         string `json:"url"`
-	Token       string `json:"token,omitempty"`
-	WebBasePath string `json:"webBasePath,omitempty"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	URL                string `json:"url"`
+	Token              string `json:"token,omitempty"`
+	WebBasePath        string `json:"webBasePath,omitempty"`
+	InsecureSkipVerify bool   `json:"insecureSkipVerify,omitempty"` // true = пропустить проверку TLS (self-signed)
 }
 
 // Inbound represents a 3X-UI inbound
@@ -173,10 +174,11 @@ type SyncCheckResult struct {
 
 // CreatePanelRequest is the request body for adding a panel
 type CreatePanelRequest struct {
-	Name        string `json:"name"`
-	URL         string `json:"url"`
-	Token       string `json:"token"`
-	WebBasePath string `json:"webBasePath,omitempty"`
+	Name               string `json:"name"`
+	URL                string `json:"url"`
+	Token              string `json:"token"`
+	WebBasePath        string `json:"webBasePath,omitempty"`
+	InsecureSkipVerify bool   `json:"insecureSkipVerify,omitempty"`
 }
 
 // CreateClientRequest is the request body for creating a client
