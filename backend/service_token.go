@@ -4,11 +4,11 @@ import "strings"
 
 // TokenService — выпуск/список/отзыв API-токенов (для ботов/агентов).
 type TokenService struct {
-	storage *Storage
+	storage Repository
 	auth    *TokenAuth
 }
 
-func NewTokenService(storage *Storage, auth *TokenAuth) *TokenService {
+func NewTokenService(storage Repository, auth *TokenAuth) *TokenService {
 	return &TokenService{storage: storage, auth: auth}
 }
 

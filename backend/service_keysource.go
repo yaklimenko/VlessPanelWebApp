@@ -1,12 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"io"
 	"log"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -14,14 +10,14 @@ import (
 
 // KeySourceService — use cases для KeySource (источников ключей).
 type KeySourceService struct {
-	storage   *Storage
-	panelAPI  *PanelAPI
-	sync      *SyncState
-	daemonURL string
+	storage  Repository
+	panelAPI PanelClient
+	sync     *SyncState
+	daemon   VlessSubTestClient
 }
 
-func NewKeySourceService(storage *Storage, panelAPI *PanelAPI, sync *SyncState, daemonURL string) *KeySourceService {
-	return &KeySourceService{storage: storage, panelAPI: panelAPI, sync: sync, daemonURL: daemonURL}
+func NewKeySourceService(storage Repository, panelAPI PanelClient, sync *SyncState, daemon VlessSubTestClient) *KeySourceService {
+	return &KeySourceService{storage: storage, panelAPI: panelAPI, sync: sync, daemon: daemon}
 }
 
 // panelSnapshot caches clients of one panel for a request batch.
@@ -288,26 +284,17 @@ func (s *KeySourceService) Test(id string) (KeySourceTestResponse, error) {
 		return KeySourceTestResponse{}, errBadRequest("у KeySource нет ключа для теста")
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	daemonURL := strings.TrimRight(s.daemonURL, "/") + "/test-single"
-	reqBody, _ := json.Marshal(TestSingleRequest{Vless: link, Timeout: 10})
-
 	start := time.Now()
-	resp, err := client.Post(daemonURL, "application/json", bytes.NewReader(reqBody))
+	single, err := s.daemon.TestSingle(link, 10)
 	ms := int(time.Since(start).Milliseconds())
 	if err != nil {
-		lastTest := &KeySourceTest{Status: "fail", At: nowStr(), Error: "демон тестов недоступен: " + err.Error()}
-		ks.LastTest = lastTest
-		ks.UpdatedAt = nowStr()
-		_ = s.storage.UpdateKeySource(*ks)
-		return KeySourceTestResponse{Result: nil, LastTest: lastTest, Error: lastTest.Error}, nil
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	var single TestSingleResponse
-	if err := json.Unmarshal(body, &single); err != nil {
+		if errors.Is(err, ErrDaemonUnreachable) {
+			lastTest := &KeySourceTest{Status: "fail", At: nowStr(), Error: "демон тестов недоступен: " + rootCause(err).Error()}
+			ks.LastTest = lastTest
+			ks.UpdatedAt = nowStr()
+			_ = s.storage.UpdateKeySource(*ks)
+			return KeySourceTestResponse{Result: nil, LastTest: lastTest, Error: lastTest.Error}, nil
+		}
 		lastTest := &KeySourceTest{Status: "fail", At: nowStr(), Error: "не удалось разобрать ответ демона"}
 		ks.LastTest = lastTest
 		ks.UpdatedAt = nowStr()

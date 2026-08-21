@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -90,4 +91,16 @@ func tailString(s string, n int) string {
 		return s
 	}
 	return "…" + s[len(s)-n:]
+}
+
+// rootCause возвращает самую глубокую ошибку в цепочке (для user-facing сообщений
+// без префиксов sentinel-обёрток).
+func rootCause(err error) error {
+	for {
+		u := errors.Unwrap(err)
+		if u == nil {
+			return err
+		}
+		err = u
+	}
 }

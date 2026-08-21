@@ -1,12 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -14,14 +10,14 @@ import (
 
 // SubscriptionService — use cases для подписок (генерация/обновление/синк-статус).
 type SubscriptionService struct {
-	storage   *Storage
-	panelAPI  *PanelAPI
-	sync      *SyncState
-	daemonURL string
+	storage  Repository
+	panelAPI PanelClient
+	sync     *SyncState
+	daemon   VlessSubTestClient
 }
 
-func NewSubscriptionService(storage *Storage, panelAPI *PanelAPI, sync *SyncState, daemonURL string) *SubscriptionService {
-	return &SubscriptionService{storage: storage, panelAPI: panelAPI, sync: sync, daemonURL: daemonURL}
+func NewSubscriptionService(storage Repository, panelAPI PanelClient, sync *SyncState, daemon VlessSubTestClient) *SubscriptionService {
+	return &SubscriptionService{storage: storage, panelAPI: panelAPI, sync: sync, daemon: daemon}
 }
 
 // enrichSync проставляет sync-статус подписки из глобального флага.
@@ -328,27 +324,17 @@ func (s *SubscriptionService) Test(id string) (TestSubscriptionResponse, error) 
 		return TestSubscriptionResponse{}, errBadRequest("Subscription has no keys to test")
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	daemonURL := strings.TrimRight(s.daemonURL, "/") + "/test-single"
-
 	var results []TestSingleResponse
 	okCount := 0
 
 	for i, key := range testKeys {
-		reqBody, _ := json.Marshal(TestSingleRequest{Vless: key.Link, Timeout: 10})
-
-		resp, err := client.Post(daemonURL, "application/json", bytes.NewReader(reqBody))
+		single, err := s.daemon.TestSingle(key.Link, 10)
 		if err != nil {
-			results = append(results, TestSingleResponse{KeyIdx: i, Status: "ERROR", IP: err.Error()})
-			continue
-		}
-
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		var single TestSingleResponse
-		if err := json.Unmarshal(body, &single); err != nil {
-			results = append(results, TestSingleResponse{KeyIdx: i, Status: "ERROR", IP: "failed to parse response"})
+			ip := "failed to parse response"
+			if errors.Is(err, ErrDaemonUnreachable) {
+				ip = rootCause(err).Error()
+			}
+			results = append(results, TestSingleResponse{KeyIdx: i, Status: "ERROR", IP: ip})
 			continue
 		}
 

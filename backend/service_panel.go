@@ -4,11 +4,11 @@ import "time"
 
 // PanelService — use cases для панелей и клиентов/инбаундов 3X-UI.
 type PanelService struct {
-	storage  *Storage
-	panelAPI *PanelAPI
+	storage  Repository
+	panelAPI PanelClient
 }
 
-func NewPanelService(storage *Storage, panelAPI *PanelAPI) *PanelService {
+func NewPanelService(storage Repository, panelAPI PanelClient) *PanelService {
 	return &PanelService{storage: storage, panelAPI: panelAPI}
 }
 

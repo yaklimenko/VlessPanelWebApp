@@ -2,45 +2,42 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
-	"os"
-	"os/exec"
 	"time"
 )
 
-// SyncService — синхронизация файлов подписок с агрегатором (rsync-скрипт).
+// SyncService — синхронизация файлов подписок с агрегатором (через AggregatorSyncer).
 type SyncService struct {
 	sync   *SyncState
-	script string
+	syncer AggregatorSyncer
 }
 
-func NewSyncService(sync *SyncState, script string) *SyncService {
-	return &SyncService{sync: sync, script: script}
+func NewSyncService(sync *SyncState, syncer AggregatorSyncer) *SyncService {
+	return &SyncService{sync: sync, syncer: syncer}
 }
 
-// Run выполняет rsync-скрипт и обновляет SyncState. При ошибке скрипта
-// возвращает SyncResponse со статусом "error" (структурированное тело 502).
+// Run выполняет синк и обновляет SyncState. При ошибке скрипта возвращает
+// SyncResponse со статусом "error" (структурированное тело 502).
 func (s *SyncService) Run(ctx context.Context) (SyncResponse, error) {
-	if _, err := os.Stat(s.script); err != nil {
-		return SyncResponse{}, errNotImplemented("sync script not found: " + s.script)
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "bash", s.script)
-	out, err := cmd.CombinedOutput()
+	out, err := s.syncer.Sync(ctx)
 	if err != nil {
-		log.Printf("SyncToAggregator failed: %v\n%s", err, string(out))
+		if errors.Is(err, ErrSyncScriptNotFound) {
+			return SyncResponse{}, errNotImplemented(err.Error())
+		}
+		log.Printf("SyncToAggregator failed: %v\n%s", err, out)
 		return SyncResponse{
 			Status: "error",
 			Error:  err.Error(),
-			Output: tailString(string(out), 2000),
+			Output: tailString(out, 2000),
 		}, errBadGateway(err.Error())
 	}
 
 	// Синк прошёл: локальные файлы = агрегатор. Флаг опускаем.
 	s.sync.Clear()
 
-	return SyncResponse{Status: "synced", Output: tailString(string(out), 2000)}, nil
+	return SyncResponse{Status: "synced", Output: tailString(out, 2000)}, nil
 }

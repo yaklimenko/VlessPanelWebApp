@@ -26,6 +26,17 @@ var (
 	ErrPanelUnreachable = errors.New("panel unreachable")
 )
 
+// VlessSubTest-семейство (демон тестов).
+var (
+	ErrDaemonUnreachable = errors.New("daemon unreachable")
+	ErrDaemonParse       = errors.New("daemon parse error")
+)
+
+// Sync-семейство (агрегатор).
+var (
+	ErrSyncScriptNotFound = errors.New("sync script not found")
+)
+
 // AppError — ошибка уровня use-case, несущая HTTP-статус и user-facing
 // сообщение. Сервисы возвращают *AppError для доменных/валидационных ошибок,
 // не завися от net/http в самих сервисах (статус — просто int).

@@ -17,12 +17,12 @@ type Handlers struct {
 	keySources    *KeySourceService
 	sync          *SyncService
 	tokens        *TokenService
-	daemon        *DaemonService
+	daemon        VlessSubTestClient
 }
 
 // NewHandlers creates a new Handlers instance.
 func NewHandlers(auth *TokenAuth, panels *PanelService, subscriptions *SubscriptionService,
-	keySources *KeySourceService, sync *SyncService, tokens *TokenService, daemon *DaemonService) *Handlers {
+	keySources *KeySourceService, sync *SyncService, tokens *TokenService, daemon VlessSubTestClient) *Handlers {
 	return &Handlers{
 		auth:          auth,
 		panels:        panels,

@@ -42,11 +42,11 @@ func main() {
 	}
 
 	// Services (use-case layer).
-	daemon := NewDaemonService(config.VlessSubTestDaemonURL)
+	daemon := NewVlessSubTestClient(config.VlessSubTestDaemonURL)
 	panels := NewPanelService(storage, panelAPI)
-	subscriptions := NewSubscriptionService(storage, panelAPI, syncState, config.VlessSubTestDaemonURL)
-	keySources := NewKeySourceService(storage, panelAPI, syncState, config.VlessSubTestDaemonURL)
-	syncSvc := NewSyncService(syncState, config.SyncScript)
+	subscriptions := NewSubscriptionService(storage, panelAPI, syncState, daemon)
+	keySources := NewKeySourceService(storage, panelAPI, syncState, daemon)
+	syncSvc := NewSyncService(syncState, NewScriptSyncer(config.SyncScript))
 	tokens := NewTokenService(storage, auth)
 
 	handlers := NewHandlers(auth, panels, subscriptions, keySources, syncSvc, tokens, daemon)
