@@ -46,7 +46,7 @@ func authMiddleware(auth *TokenAuth) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			role, ok := auth.Authenticate(bearerToken(r))
 			if !ok {
-				respondError(w, http.StatusUnauthorized, "unauthorized")
+				respondError(w, http.StatusUnauthorized, msgUnauthorized)
 				return
 			}
 			r = r.WithContext(context.WithValue(r.Context(), authRoleKey, role))
@@ -59,7 +59,7 @@ func authMiddleware(auth *TokenAuth) func(http.Handler) http.Handler {
 func requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if authRole(r) != "admin" {
-			respondError(w, http.StatusForbidden, "admin token required")
+			respondError(w, http.StatusForbidden, msgAdminRequired)
 			return
 		}
 		next.ServeHTTP(w, r)

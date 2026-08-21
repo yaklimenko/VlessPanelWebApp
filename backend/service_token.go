@@ -21,7 +21,7 @@ func NewTokenService(storage Repository, auth *TokenAuth) *TokenService {
 func (s *TokenService) List() ([]model.APIToken, error) {
 	tokens, err := s.storage.LoadTokens()
 	if err != nil {
-		return nil, errInternal("Failed to load tokens")
+		return nil, errInternal(msgLoadTokensFailed)
 	}
 	for i := range tokens {
 		tokens[i].TokenHash = ""
@@ -39,7 +39,7 @@ func (s *TokenService) Create(req dto.CreateTokenRequest) (dto.CreateTokenRespon
 		CreatedAt: nowStr(),
 	}
 	if err := s.storage.AddToken(tok); err != nil {
-		return dto.CreateTokenResponse{}, errInternal("Failed to create token")
+		return dto.CreateTokenResponse{}, errInternal(msgCreateTokenFailed)
 	}
 	s.auth.AddIssued(tok.TokenHash)
 

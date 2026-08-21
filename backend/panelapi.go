@@ -122,7 +122,7 @@ func (api *PanelAPI) ListInbounds(panel model.Panel) ([]xui.XUIInbound, error) {
 		return nil, fmt.Errorf("3X-UI error: %s", xuiResp.Msg)
 	}
 
-	// Parse the obj field into []xui.XUIInbound
+	// Parse the obj field into []XUIInbound
 	objBytes, err := json.Marshal(xuiResp.Obj)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling obj: %w", err)
@@ -169,7 +169,7 @@ func (api *PanelAPI) fetchXUIClients(panel model.Panel) ([]xui.XUIClient, error)
 	return xuiClients, nil
 }
 
-// mapClientsToInbounds converts raw XUI clients into model.Client, resolving inbound
+// mapClientsToInbounds converts raw XUI clients into Client, resolving inbound
 // IDs to remark names via the inbounds list.
 func mapClientsToInbounds(xuiClients []xui.XUIClient, inbounds []xui.XUIInbound) []model.Client {
 	remarkMap := make(map[int]string, len(inbounds))
@@ -779,7 +779,7 @@ func (api *PanelAPI) GetClientKeyForInbound(panel model.Panel, email string, inb
 		}
 	}
 	if !foundInbound {
-		return model.VLESSKey{}, fmt.Errorf("%w: inbound %d", ErrInboundNotFound, inboundID)
+		return model.VLESSKey{}, fmt.Errorf("%w: инбаунд %d", ErrInboundNotFound, inboundID)
 	}
 
 	keys, err := api.GetClientKeys(panel, email)
@@ -793,7 +793,7 @@ func (api *PanelAPI) GetClientKeyForInbound(panel model.Panel, email string, inb
 		}
 	}
 
-	return model.VLESSKey{}, fmt.Errorf("%w: client %s on inbound %d", ErrClientNotFound, email, inboundID)
+	return model.VLESSKey{}, fmt.Errorf("%w: %s на инбаунде %d", ErrClientNotFound, email, inboundID)
 }
 
 // GetClientStats fetches traffic/expiry stats for a client from the panel's

@@ -197,7 +197,7 @@ func TestSubscriptionFileRejectsUnsafeNames(t *testing.T) {
 	}
 }
 
-// UpdateKeySourceCaches должен обновить кэш нескольких model.KeySource одной атомарной
+// UpdateKeySourceCaches должен обновить кэш нескольких KeySource одной атомарной
 // записью и не трогать отсутствующие ID.
 func TestUpdateKeySourceCaches(t *testing.T) {
 	s := newTestStorage(t)

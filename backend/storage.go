@@ -16,7 +16,7 @@ import (
 // Storage handles file-based data persistence.
 // Layout:
 //   - panels.json        — list of 3X-UI panels
-//   - key-sources.json   — list of model.KeySource records
+//   - key-sources.json   — list of KeySource records
 //   - subscriptions.json — subscription metadata (status, keySourceId refs, updatedAt)
 //   - tokens.json        — issued API tokens (sha256 hashes only)
 //   - aggregatorDir      — generated subscription files configs-{name}.txt
@@ -238,7 +238,7 @@ func (s *Storage) LoadKeySources() ([]model.KeySource, error) {
 	return s.loadKeySourcesLocked()
 }
 
-// GetKeySource returns a model.KeySource by ID.
+// GetKeySource returns a KeySource by ID.
 func (s *Storage) GetKeySource(id string) (*model.KeySource, error) {
 	sources, err := s.LoadKeySources()
 	if err != nil {
@@ -253,7 +253,7 @@ func (s *Storage) GetKeySource(id string) (*model.KeySource, error) {
 	return nil, fmt.Errorf("%w: %s", ErrKeySourceNotFound, id)
 }
 
-// AddKeySource appends a new model.KeySource unless a duplicate of the same type
+// AddKeySource appends a new KeySource unless a duplicate of the same type
 // already exists (panel: same panel/email/inbound triplet; manual: same link).
 // The dedup check and append are atomic. Returns (existing, true) when a
 // duplicate is found, otherwise (new, false).
@@ -289,7 +289,7 @@ func (s *Storage) AddKeySource(ks model.KeySource) (*model.KeySource, bool, erro
 	return &ks, false, nil
 }
 
-// UpdateKeySource replaces a model.KeySource by ID (atomic read-modify-write).
+// UpdateKeySource replaces a KeySource by ID (atomic read-modify-write).
 func (s *Storage) UpdateKeySource(updated model.KeySource) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -312,7 +312,7 @@ func (s *Storage) UpdateKeySource(updated model.KeySource) error {
 	return s.saveKeySourcesLocked(sources)
 }
 
-// UpdateKeySourceCaches обновляет model.CachedKey для нескольких model.KeySource в одном
+// UpdateKeySourceCaches обновляет CachedKey для нескольких KeySource в одном
 // атомарном read-modify-write (одна запись файла). Несуществующие ID
 // игнорируются. Используется при массовой регенерации, чтобы не перезаписывать
 // key-sources.json по одному на каждый ключ.
@@ -336,7 +336,7 @@ func (s *Storage) UpdateKeySourceCaches(caches map[string]model.CachedKey) error
 	return s.saveKeySourcesLocked(sources)
 }
 
-// DeleteKeySource removes a model.KeySource by ID (atomic read-modify-write).
+// DeleteKeySource removes a KeySource by ID (atomic read-modify-write).
 func (s *Storage) DeleteKeySource(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -359,7 +359,7 @@ func (s *Storage) DeleteKeySource(id string) error {
 	return s.saveKeySourcesLocked(sources)
 }
 
-// --- model.Subscription metadata ---
+// --- Subscription metadata ---
 
 // LoadSubscriptionsMeta reads subscription metadata (id/name/status/keys/updatedAt).
 func (s *Storage) LoadSubscriptionsMeta() ([]model.Subscription, error) {
@@ -525,7 +525,7 @@ func (s *Storage) DeleteToken(id string) (model.APIToken, error) {
 	return model.APIToken{}, fmt.Errorf("%w: %s", ErrTokenNotFound, id)
 }
 
-// --- model.Subscription files ---
+// --- Subscription files ---
 
 // subscriptionFile returns the path for a subscription file. The name is
 // validated so it cannot escape aggregatorDir (defense in depth: read/delete
@@ -622,7 +622,7 @@ func (s *Storage) SubscriptionFileMtime(name string) string {
 	return info.ModTime().UTC().Format("2006-01-02T15:04:05Z07:00")
 }
 
-// ListSubscriptions returns all subscriptions, merging metadata (model.KeySource refs,
+// ListSubscriptions returns all subscriptions, merging metadata (KeySource refs,
 // status) with the actual files. Legacy files without metadata are reported with
 // manual keys (keySourceId=null) and status active.
 func (s *Storage) ListSubscriptions() ([]model.Subscription, error) {
@@ -682,7 +682,7 @@ func (s *Storage) ListSubscriptions() ([]model.Subscription, error) {
 					keys = append(keys, model.SubKey{ID: fmt.Sprintf("k-%d", i+1), Link: line})
 				}
 			}
-			// Meta keys beyond the file lines (e.g. model.KeySource added but not yet
+			// Meta keys beyond the file lines (e.g. KeySource added but not yet
 			// generated) are kept as-is with their stored (possibly empty) link.
 			if len(meta.Keys) > len(lines) {
 				for i := len(lines); i < len(meta.Keys); i++ {

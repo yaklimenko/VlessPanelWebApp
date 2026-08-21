@@ -11,7 +11,7 @@ import (
 	"vlesspanel/model"
 )
 
-// ksLabelFor builds a human-readable label for a model.KeySource.
+// ksLabelFor builds a human-readable label for a KeySource.
 func ksLabelFor(ks *model.KeySource, panelMap map[string]model.Panel) string {
 	if ks.Label != "" {
 		return ks.Label

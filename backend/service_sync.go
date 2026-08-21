@@ -20,7 +20,7 @@ func NewSyncService(sync *SyncState, syncer AggregatorSyncer) *SyncService {
 }
 
 // Run выполняет синк и обновляет SyncState. При ошибке скрипта возвращает
-// dto.SyncResponse со статусом "error" (структурированное тело 502).
+// SyncResponse со статусом "error" (структурированное тело 502).
 func (s *SyncService) Run(ctx context.Context) (dto.SyncResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()

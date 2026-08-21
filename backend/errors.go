@@ -12,29 +12,29 @@ import (
 
 // Storage-семейство.
 var (
-	ErrPanelNotFound           = errors.New("panel not found")
-	ErrKeySourceNotFound       = errors.New("key source not found")
-	ErrSubscriptionNotFound    = errors.New("subscription not found")
-	ErrInvalidSubscriptionName = errors.New("invalid subscription name")
-	ErrTokenNotFound           = errors.New("token not found")
+	ErrPanelNotFound           = errors.New("панель не найдена")
+	ErrKeySourceNotFound       = errors.New("источник ключа не найден")
+	ErrSubscriptionNotFound    = errors.New("подписка не найдена")
+	ErrInvalidSubscriptionName = errors.New("недопустимое имя подписки")
+	ErrTokenNotFound           = errors.New("токен не найден")
 )
 
 // PanelAPI-семейство (3X-UI).
 var (
-	ErrClientNotFound   = errors.New("client not found on panel")
-	ErrInboundNotFound  = errors.New("inbound not found on panel")
-	ErrPanelUnreachable = errors.New("panel unreachable")
+	ErrClientNotFound   = errors.New("клиент не найден на панели")
+	ErrInboundNotFound  = errors.New("инбаунд не найден на панели")
+	ErrPanelUnreachable = errors.New("панель недоступна")
 )
 
 // VlessSubTest-семейство (демон тестов).
 var (
-	ErrDaemonUnreachable = errors.New("daemon unreachable")
-	ErrDaemonParse       = errors.New("daemon parse error")
+	ErrDaemonUnreachable = errors.New("демон недоступен")
+	ErrDaemonParse       = errors.New("ошибка разбора ответа демона")
 )
 
 // Sync-семейство (агрегатор).
 var (
-	ErrSyncScriptNotFound = errors.New("sync script not found")
+	ErrSyncScriptNotFound = errors.New("скрипт синка не найден")
 )
 
 // AppError — ошибка уровня use-case, несущая HTTP-статус и user-facing
