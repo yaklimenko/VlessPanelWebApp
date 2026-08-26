@@ -22,6 +22,45 @@ export function KSChip({ subKey, keySource, onOpen, onCopy, onDelete, onTest, te
     );
   }
 
+  // manual KeySource (с меткой) — grey chip
+  if (ks.type === 'manual') {
+    const testRes = ks.lastTest;
+    let testHtml;
+    if (testing) {
+      testHtml = <span className="ks-testres run"><span className="spin small"></span> тест…</span>;
+    } else {
+      let resTxt = '', resCls = '';
+      if (testRes) {
+        resCls = testRes.status === 'ok' ? 'ok' : 'fail';
+        resTxt = testRes.status === 'ok'
+          ? '✓ ' + (testRes.ms != null ? testRes.ms + ' мс' : 'ok')
+          : '✗ ' + (testRes.error || 'ошибка');
+      }
+      testHtml = (
+        <>
+          <button className="ks-ico js-test" title="Тест ключа (test-single)" onClick={(e) => { e.stopPropagation(); onTest(ks); }}>🧪</button>
+          {resTxt && <span className={`ks-testres ${resCls}`} title="Тест демоном vlesssubtest">{resTxt}</span>}
+        </>
+      );
+    }
+    return (
+      <div className="ks-chip ks-manual" data-ks={ks.id} title="manual · клик — детали" onClick={onOpen}>
+        <span className="ks-dot manual"></span>
+        <span className="ks-label">
+          <span className="ks-server ell">{ks.label || 'manual'}</span>
+          <span className="ks-sep">·</span>
+          <span className="ks-inbound ell">{shortLink(ks.vlessLink || subKey.link)}</span>
+        </span>
+        <span className="ks-meta">
+          <span className="ks-status manual">manual</span>
+          {testHtml}
+          <button className="ks-ico js-copy" title="Скопировать vless-ключ" onClick={(e) => { e.stopPropagation(); onCopy(ks); }}>⧉</button>
+          <button className="ks-ico del js-del" title="Удалить из подписки" onClick={(e) => { e.stopPropagation(); onDelete(subKey); }}>×</button>
+        </span>
+      </div>
+    );
+  }
+
   const st = ks.status || 'ok';
   const cls = 'ks-chip ' + (st === 'ok' ? '' : st === 'expired' ? 'ks-expired' : st === 'manual' ? 'ks-manual' : 'ks-missing');
   const statusTxt =
