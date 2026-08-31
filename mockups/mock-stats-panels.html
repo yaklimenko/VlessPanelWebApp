@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VlessPanel · Статистика · Панели (мок Этапа 3)</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+/* ═══════════ Базовые переменные — 1-в-1 с App.css ═══════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #21262d;
+  --text: #e6edf3;
+  --text-secondary: #8b949e;
+  --accent: #58a6ff;
+  --accent-hover: #79b8ff;
+  --accent-muted: rgba(88,166,255,.15);
+  --success: #3fb950;
+  --danger: #f85149;
+  --danger-faded: rgba(248,81,73,.15);
+  --warn: #d29922;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: 0 2px 8px rgba(0,0,0,.4);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+html, body { height: 100%; }
+body {
+  font-family: var(--font); background: var(--bg); color: var(--text);
+  font-size: 14px; line-height: 1.5; overflow: hidden;
+}
+input, button, select { font-family: inherit; font-size: inherit; color: inherit; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #30363d; }
+
+/* ═══════════ Layout: сайдбар + контент ═══════════ */
+.app { display: flex; height: 100vh; }
+.sidebar {
+  width: 200px; flex-shrink: 0; background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; z-index: 10;
+}
+.side-logo {
+  padding: 14px 16px; font-size: 15px; font-weight: 700; letter-spacing: -.3px;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.side-logo .accent { color: var(--accent); }
+.side-nav { padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.side-link {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  border-radius: var(--radius-sm); color: var(--text-secondary);
+  font-size: 13.5px; font-weight: 500; cursor: pointer; text-decoration: none;
+  transition: background .15s, color .15s; border: 1px solid transparent;
+}
+.side-link:hover { background: rgba(255,255,255,.04); color: var(--text); }
+.side-link.active {
+  background: var(--accent-muted); color: var(--accent);
+  font-weight: 600; border-color: rgba(88,166,255,.25);
+}
+.side-link .ico { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+.side-foot {
+  margin-top: auto; padding: 10px 16px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-secondary);
+}
+.main-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* ═══════════ Header — как в приложении ═══════════ */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
+.app-title { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
+.app-title .accent { color: var(--accent); }
+.app-version { font-size: 11px; color: var(--text-secondary); }
+
+/* ═══════════ Кнопки ═══════════ */
+.btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer;
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.btn:hover { background: #1c2333; border-color: var(--accent); }
+.btn-primary { background: var(--accent-muted); border-color: var(--accent); color: var(--accent); }
+.btn-primary:hover { background: rgba(88,166,255,.25); }
+.btn-success { color: var(--success); }
+.btn-success:hover { background: rgba(63,185,80,.15); border-color: var(--success); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.badge {
+  display: inline-block; padding: 1px 7px; border-radius: 10px;
+  font-size: 10px; font-weight: 600; background: rgba(139,148,158,.15);
+  color: var(--text-secondary);
+}
+.badge.ok { background: rgba(63,185,80,.12); color: var(--success); }
+.badge.danger { background: rgba(248,81,73,.15); color: var(--danger); }
+
+/* ═══════════ Табы страницы ═══════════ */
+.page-tabs {
+  display: flex; gap: 2px; padding: 0 20px;
+  border-bottom: 1px solid var(--border); background: var(--bg);
+  flex-shrink: 0;
+}
+.page-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 16px; font-size: 13.5px; color: var(--text-secondary);
+  cursor: pointer; text-decoration: none;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.page-tab:hover { color: var(--text); }
+.page-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* ═══════════ Контент статистики ═══════════ */
+.stats-body { flex: 1; overflow-y: auto; padding: 16px 20px 28px; }
+.page-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.page-title { font-size: 15px; font-weight: 700; }
+.page-title .sub { font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-left: 8px; }
+.page-head-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.page-updated { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+
+/* Переключатель диапазона */
+.range-switch {
+  display: inline-flex; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.range-btn {
+  padding: 5px 14px; font-size: 12px; color: var(--text-secondary);
+  cursor: pointer; border: none; background: transparent;
+  transition: background .15s, color .15s; font-weight: 500;
+}
+.range-btn:hover { color: var(--text); background: rgba(255,255,255,.03); }
+.range-btn.active { background: var(--accent-muted); color: var(--accent); font-weight: 600; }
+
+/* Блок панели */
+.panel-block {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 16px; overflow: hidden;
+}
+.panel-block-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.panel-block-title { font-size: 14px; font-weight: 700; }
+.panel-block-addr {
+  font-size: 12px; color: var(--text-secondary);
+  font-family: var(--mono);
+}
+.xray-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 600; padding: 2px 9px;
+  border-radius: 10px; white-space: nowrap;
+}
+.xray-badge.ok { background: rgba(63,185,80,.12); color: var(--success); }
+.xray-badge.err { background: var(--danger-faded); color: var(--danger); }
+.online-info { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.online-info b { color: var(--accent); font-weight: 600; }
+.head-spacer { flex: 1; }
+.snap-info { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+
+/* Сетка графиков */
+.chart-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 14px 16px;
+}
+.chart-box {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 10px 6px;
+}
+.chart-title {
+  font-size: 11.5px; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: .5px;
+  font-weight: 600; margin-bottom: 4px; padding-left: 2px;
+}
+.chart-title .val { color: var(--text); text-transform: none; font-weight: 700; }
+.chart { width: 100%; height: 190px; }
+
+/* Недоступная панель */
+.panel-block.unavailable { border-style: dashed; opacity: .85; background: rgba(22,27,34,.5); }
+.unavail-body {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 18px 16px; color: var(--text-secondary); font-size: 13px;
+}
+.unavail-body .big-ico { font-size: 22px; opacity: .7; }
+.unavail-body .warn-text b { color: var(--warn); font-weight: 600; }
+.unavail-body .last-seen {
+  margin-top: 6px; font-size: 12px; color: var(--text-secondary);
+  font-family: var(--mono);
+}
+
+@media (max-width: 1100px) {
+  .chart-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══════ Сайдбар ═══════ -->
+  <aside class="sidebar">
+    <div class="side-logo">Vless<span class="accent">Panel</span></div>
+    <nav class="side-nav">
+      <a class="side-link" href="mock-main.html"><span class="ico">🔑</span><span class="txt">Подписки</span></a>
+      <a class="side-link active" href="mock-stats-panels.html"><span class="ico">📊</span><span class="txt">Статистика</span></a>
+    </nav>
+    <div class="side-foot">мок Этапа 3 · сайдбар</div>
+  </aside>
+
+  <!-- ═══════ Контент ═══════ -->
+  <div class="main-wrap">
+
+    <!-- Шапка — как в приложении -->
+    <header class="header">
+      <div class="header-left">
+        <span class="app-title">Vless<span class="accent">Panel</span></span>
+        <button class="btn btn-danger btn-sm">– Панель</button>
+        <button class="btn btn-primary btn-sm">+ Панель</button>
+      </div>
+      <div class="header-right">
+        <button class="btn btn-sm">🔄 Перегенерировать все</button>
+        <button class="btn btn-sm btn-success">⟳ Синк с агрегатором</button>
+        <span class="app-version">v0.9.0</span>
+      </div>
+    </header>
+
+    <!-- Табы раздела Статистика -->
+    <div class="page-tabs">
+      <a class="page-tab active" href="mock-stats-panels.html">📈 Панели</a>
+      <a class="page-tab" href="mock-stats-tests.html">🧪 Тестирование ключей</a>
+    </div>
+
+    <div class="stats-body">
+      <div class="page-head">
+        <div class="page-title">Телеметрия панелей<span class="sub">снапшоты каждые 5 мин · 24ч</span></div>
+        <div class="page-head-right">
+          <span class="page-updated">обновлено: 31.08 23:05 (Томск)</span>
+          <div class="range-switch" id="rangeSwitch">
+            <button class="range-btn active" data-range="24h">24h</button>
+            <button class="range-btn" data-range="7d">7d</button>
+            <button class="range-btn" data-range="90d">90d</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Панель 1: Hip Fin1 ─── -->
+      <div class="panel-block">
+        <div class="panel-block-head">
+          <span class="panel-block-title">Hip Fin1</span>
+          <span class="panel-block-addr">45.14.246.99:47744</span>
+          <span class="xray-badge ok">🟢 running</span>
+          <span class="online-info">онлайн: <b>1</b></span>
+          <span class="head-spacer"></span>
+          <span class="snap-info">последний снапшот: 23:00</span>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-box">
+            <div class="chart-title">🧠 RAM <span class="val">avg 23.6% · max 28.9%</span></div>
+            <div id="chart-ram-hip-fin1" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">⚡ CPU <span class="val">avg 2.1% · max 5.4%</span></div>
+            <div id="chart-cpu-hip-fin1" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">📈 Load average <span class="val">1/5/15</span></div>
+            <div id="chart-load-hip-fin1" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">🌐 Сеть <span class="val">KB/s</span></div>
+            <div id="chart-net-hip-fin1" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">👥 Онлайн + open_conns</div>
+            <div id="chart-conns-hip-fin1" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">💾 Диск <span class="val">5.56 / 19.68 GB (28%)</span></div>
+            <div id="chart-disk-hip-fin1" class="chart"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Панель 2: FastVDS EstoniaD ─── -->
+      <div class="panel-block">
+        <div class="panel-block-head">
+          <span class="panel-block-title">FastVDS EstoniaD</span>
+          <span class="panel-block-addr">estcdn.gopherden.net:34764</span>
+          <span class="xray-badge ok">🟢 running</span>
+          <span class="online-info">онлайн: <b>4</b></span>
+          <span class="head-spacer"></span>
+          <span class="snap-info">последний снапшот: 23:00</span>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-box">
+            <div class="chart-title">🧠 RAM <span class="val">avg 31.8% · max 38.2%</span></div>
+            <div id="chart-ram-fastvds-estoniad" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">⚡ CPU <span class="val">avg 1.4% · max 6.1%</span></div>
+            <div id="chart-cpu-fastvds-estoniad" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">📈 Load average <span class="val">1/5/15</span></div>
+            <div id="chart-load-fastvds-estoniad" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">🌐 Сеть <span class="val">KB/s</span></div>
+            <div id="chart-net-fastvds-estoniad" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">👥 Онлайн + open_conns</div>
+            <div id="chart-conns-fastvds-estoniad" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">💾 Диск <span class="val">6.10 / 19.68 GB (31%)</span></div>
+            <div id="chart-disk-fastvds-estoniad" class="chart"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Панель 3: Hip warsaw ─── -->
+      <div class="panel-block">
+        <div class="panel-block-head">
+          <span class="panel-block-title">Hip warsaw</span>
+          <span class="panel-block-addr">polcdn.gopherden.net:36472</span>
+          <span class="xray-badge ok">🟢 running</span>
+          <span class="online-info">онлайн: <b>5</b></span>
+          <span class="head-spacer"></span>
+          <span class="snap-info">последний снапшот: 23:00</span>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-box">
+            <div class="chart-title">🧠 RAM <span class="val">avg 28.4% · max 34.1%</span></div>
+            <div id="chart-ram-hip-warsaw" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">⚡ CPU <span class="val">avg 3.1% · max 7.2%</span></div>
+            <div id="chart-cpu-hip-warsaw" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">📈 Load average <span class="val">1/5/15</span></div>
+            <div id="chart-load-hip-warsaw" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">🌐 Сеть <span class="val">KB/s</span></div>
+            <div id="chart-net-hip-warsaw" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">👥 Онлайн + open_conns</div>
+            <div id="chart-conns-hip-warsaw" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">💾 Диск <span class="val">5.90 / 19.70 GB (30%)</span></div>
+            <div id="chart-disk-hip-warsaw" class="chart"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Панель 4: AdminVps pol1 (xray error) ─── -->
+      <div class="panel-block">
+        <div class="panel-block-head">
+          <span class="panel-block-title">AdminVps pol1</span>
+          <span class="panel-block-addr">pol1cdn.gopherden.net:5867</span>
+          <span class="xray-badge err">🔴 error</span>
+          <span class="online-info">онлайн: <b>0</b></span>
+          <span class="head-spacer"></span>
+          <span class="snap-info">последний снапшот: 23:00</span>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-box">
+            <div class="chart-title">🧠 RAM <span class="val">avg 40.9% · max 45.3%</span></div>
+            <div id="chart-ram-adminvps-pol1" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">⚡ CPU <span class="val">avg 0.9% · max 2.3%</span></div>
+            <div id="chart-cpu-adminvps-pol1" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">📈 Load average <span class="val">1/5/15</span></div>
+            <div id="chart-load-adminvps-pol1" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">🌐 Сеть <span class="val">KB/s</span></div>
+            <div id="chart-net-adminvps-pol1" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">👥 Онлайн + open_conns <span class="val">(xray down)</span></div>
+            <div id="chart-conns-adminvps-pol1" class="chart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">💾 Диск <span class="val">8.40 / 40.00 GB (21%)</span></div>
+            <div id="chart-disk-adminvps-pol1" class="chart"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Панель 5: Hip NL — недоступна ─── -->
+      <div class="panel-block unavailable">
+        <div class="panel-block-head">
+          <span class="panel-block-title">Hip NL</span>
+          <span class="panel-block-addr">46.21.83.114:27607</span>
+          <span class="xray-badge err">🔴 error</span>
+        </div>
+        <div class="unavail-body">
+          <span class="big-ico">⚠️</span>
+          <div>
+            <div class="warn-text"><b>Панель недоступна (нет телеметрии)</b> — API панели не отвечает, снапшоты не собираются.</div>
+            <div class="last-seen">последний снапшот: 29.08 21:40 · тишина: 2 дня 1 ч</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════ Генерация данных (детерминированная) ═══════════ */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function pad(n) { return String(n).padStart(2, '0'); }
+function smooth(arr, w) {
+  const out = [];
+  for (let i = 0; i < arr.length; i++) {
+    let s = 0, c = 0;
+    for (let j = -w; j <= w; j++) {
+      const k = i + j;
+      if (k >= 0 && k < arr.length) { s += arr[k]; c++; }
+    }
+    out.push(s / c);
+  }
+  return out;
+}
+
+const N = 48; // 24ч × шаг 30 мин (для мока)
+function genLabels() {
+  const end = Date.UTC(2026, 7, 31, 23, 0); // трактуем как Томское время
+  const labels = [];
+  for (let i = N - 1; i >= 0; i--) {
+    const d = new Date(end - i * 30 * 60000);
+    labels.push(pad(d.getUTCDate()) + '.' + pad(d.getUTCMonth() + 1) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()));
+  }
+  return labels;
+}
+
+const PANELS = [
+  { id: 'hip-fin1',         name: 'Hip Fin1',         ramBase: 23.6, cpuBase: 2.1, loadBase: 0.045, online: 1, xray: 1, seed: 11, disk: [5.56, 19.68] },
+  { id: 'fastvds-estoniad', name: 'FastVDS EstoniaD', ramBase: 31.8, cpuBase: 1.4, loadBase: 0.030, online: 4, xray: 1, seed: 22, disk: [6.10, 19.68] },
+  { id: 'hip-warsaw',       name: 'Hip warsaw',        ramBase: 28.4, cpuBase: 3.1, loadBase: 0.070, online: 5, xray: 1, seed: 33, disk: [5.90, 19.70] },
+  { id: 'adminvps-pol1',    name: 'AdminVps pol1',     ramBase: 40.9, cpuBase: 0.9, loadBase: 0.020, online: 0, xray: 0, seed: 44, disk: [8.40, 40.00] },
+];
+
+function genPanel(p) {
+  const rnd = mulberry32(p.seed);
+  const labels = genLabels();
+  const ramAvg = [], ramMax = [], cpuAvg = [], cpuMax = [];
+  const load1 = [], up = [], down = [], online = [], conns = [];
+  for (let i = 0; i < N; i++) {
+    let ra = p.ramBase + Math.sin(i / 5.2) * 3.2 + (rnd() - 0.5) * 4;
+    ra = Math.max(16, Math.min(58, ra));
+    ramAvg.push(+ra.toFixed(2));
+    ramMax.push(+(ra + 2.5 + rnd() * 5).toFixed(2));
+
+    let ca = p.cpuBase + (rnd() - 0.5) * p.cpuBase * 1.6;
+    if (rnd() < 0.09) ca += 2 + rnd() * 4;
+    ca = Math.max(0.2, ca);
+    cpuAvg.push(+ca.toFixed(2));
+    cpuMax.push(+(ca + 1 + rnd() * 3).toFixed(2));
+
+    load1.push(Math.max(0, +(p.loadBase * 1.4 + (rnd() - 0.5) * 0.06).toFixed(3)));
+
+    let u = 12 + rnd() * 50, dwn = 14 + rnd() * 55;
+    if (rnd() < 0.13) { u = 180 + rnd() * 520; dwn = 200 + rnd() * 500; }
+    if (p.xray === 0) { u = rnd() * 3; dwn = rnd() * 3; }
+    up.push(+u.toFixed(1));
+    down.push(+dwn.toFixed(1));
+
+    const ol = p.xray === 0 ? 0 : Math.max(1, Math.round(p.online + (rnd() - 0.5) * 1.6));
+    online.push(ol);
+    conns.push(p.xray === 0 ? 0 : Math.round(700 + rnd() * 200));
+  }
+  const load5 = smooth(load1, 1).map(v => +v.toFixed(3));
+  const load15 = smooth(load1, 3).map(v => +v.toFixed(3));
+  return { labels, ramAvg, ramMax, cpuAvg, cpuMax, load1, load5, load15, up, down, online, conns };
+}
+
+/* ═══════════ ECharts ═══════════ */
+const TOOLTIP = {
+  trigger: 'axis',
+  backgroundColor: '#161b22', borderColor: '#21262d',
+  textStyle: { color: '#e6edf3', fontSize: 12 },
+  axisPointer: {
+    type: 'cross', lineStyle: { color: 'rgba(139,148,158,.4)' },
+    crossStyle: { color: 'rgba(139,148,158,.5)' }, label: { backgroundColor: '#21262d' }
+  }
+};
+const DATAZOOM = [
+  { type: 'inside' },
+  {
+    type: 'slider', height: 14, bottom: 4,
+    borderColor: '#21262d', backgroundColor: 'rgba(22,27,34,.7)',
+    fillerColor: 'rgba(88,166,255,.18)',
+    handleStyle: { color: '#58a6ff' }, moveHandleStyle: { color: '#21262d' },
+    textStyle: { color: '#8b949e', fontSize: 10 },
+    dataBackground: { lineStyle: { color: '#30363d' }, areaStyle: { color: 'rgba(48,54,61,.3)' } }
+  }
+];
+const GRID = { left: 46, right: 14, top: 28, bottom: 36 };
+
+function mkLineOpt(labels, series, yName, yMax) {
+  return {
+    grid: GRID,
+    tooltip: TOOLTIP,
+    dataZoom: DATAZOOM,
+    xAxis: {
+      type: 'category', data: labels,
+      axisLine: { lineStyle: { color: '#21262d' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#8b949e', fontSize: 10, hideOverlap: true }
+    },
+    yAxis: {
+      type: 'value', name: yName, max: yMax,
+      nameTextStyle: { color: '#8b949e', fontSize: 10 },
+      axisLabel: { color: '#8b949e', fontSize: 10 },
+      splitLine: { lineStyle: { color: 'rgba(33,38,45,.7)' } }
+    },
+    series
+  };
+}
+function mkSeries(name, data, color, extra) {
+  return Object.assign({
+    name, type: 'line', data,
+    smooth: true, symbol: 'none',
+    lineStyle: { width: 1.5, color },
+    itemStyle: { color }
+  }, extra || {});
+}
+
+const charts = [];
+function initPanelCharts(p) {
+  const d = genPanel(p);
+  const el = (suffix) => document.getElementById('chart-' + suffix + '-' + p.id);
+
+  // RAM
+  let c = echarts.init(el('ram'));
+  c.setOption(mkLineOpt(d.labels, [
+    mkSeries('RAM avg %', d.ramAvg, '#58a6ff'),
+    mkSeries('RAM max %', d.ramMax, '#d29922'),
+  ], 'RAM %', 60));
+  charts.push(c);
+
+  // CPU
+  c = echarts.init(el('cpu'));
+  c.setOption(mkLineOpt(d.labels, [
+    mkSeries('CPU avg %', d.cpuAvg, '#3fb950'),
+    mkSeries('CPU max %', d.cpuMax, '#f85149'),
+  ], 'CPU %', 12));
+  charts.push(c);
+
+  // Load
+  c = echarts.init(el('load'));
+  c.setOption(mkLineOpt(d.labels, [
+    mkSeries('load1', d.load1, '#58a6ff'),
+    mkSeries('load5', d.load5, '#d29922'),
+    mkSeries('load15', d.load15, '#8b949e'),
+  ], 'load', 0.4));
+  charts.push(c);
+
+  // Сеть
+  c = echarts.init(el('net'));
+  c.setOption(mkLineOpt(d.labels, [
+    mkSeries('↑ net_up KB/s', d.up, '#58a6ff', { areaStyle: { opacity: .15 } }),
+    mkSeries('↓ net_down KB/s', d.down, '#3fb950', { areaStyle: { opacity: .15 } }),
+  ], 'KB/s', 750));
+  charts.push(c);
+
+  // Онлайн + conns (две оси)
+  c = echarts.init(el('conns'));
+  c.setOption({
+    grid: GRID,
+    tooltip: TOOLTIP,
+    dataZoom: DATAZOOM,
+    legend: { top: 0, right: 4, textStyle: { color: '#8b949e', fontSize: 10 }, itemWidth: 12, itemHeight: 8 },
+    xAxis: {
+      type: 'category', data: d.labels,
+      axisLine: { lineStyle: { color: '#21262d' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#8b949e', fontSize: 10, hideOverlap: true }
+    },
+    yAxis: [
+      { type: 'value', name: 'онлайн', min: 0, max: 6, nameTextStyle: { color: '#8b949e', fontSize: 10 }, axisLabel: { color: '#8b949e', fontSize: 10 }, splitLine: { lineStyle: { color: 'rgba(33,38,45,.7)' } } },
+      { type: 'value', name: 'conns', min: 0, max: 1000, nameTextStyle: { color: '#8b949e', fontSize: 10 }, axisLabel: { color: '#8b949e', fontSize: 10 }, splitLine: { show: false } }
+    ],
+    series: [
+      mkSeries('онлайн', d.online, '#58a6ff', { yAxisIndex: 0, lineStyle: { width: 1.5, color: '#58a6ff', type: 'dashed' } }),
+      mkSeries('open_conns', d.conns, '#d29922', { yAxisIndex: 1 }),
+    ]
+  });
+  charts.push(c);
+
+  // Диск — горизонтальный бар
+  c = echarts.init(el('disk'));
+  const [du, dt] = p.disk;
+  c.setOption({
+    grid: { left: 12, right: 14, top: 14, bottom: 18 },
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: '#161b22', borderColor: '#21262d',
+      textStyle: { color: '#e6edf3', fontSize: 12 },
+      formatter: (pp) => pp.marker + ' ' + pp.seriesName + ': ' + pp.value + ' GB'
+    },
+    xAxis: { type: 'value', max: dt, show: false },
+    yAxis: { type: 'category', data: [''], show: false },
+    series: [
+      { name: 'Занято', type: 'bar', stack: 'd', data: [du], barWidth: 16, itemStyle: { color: '#58a6ff', borderRadius: [4, 0, 0, 4] } },
+      { name: 'Свободно', type: 'bar', stack: 'd', data: [+(dt - du).toFixed(2)], itemStyle: { color: '#21262d', borderRadius: [0, 4, 4, 0] } }
+    ]
+  });
+  charts.push(c);
+}
+
+PANELS.forEach(initPanelCharts);
+
+/* Переключатель диапазона — декоративный */
+document.getElementById('rangeSwitch').addEventListener('click', (e) => {
+  const btn = e.target.closest('.range-btn');
+  if (!btn) return;
+  document.querySelectorAll('#rangeSwitch .range-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+});
+
+window.addEventListener('resize', () => charts.forEach(c => c.resize()));
+</script>
+</body>
+</html>

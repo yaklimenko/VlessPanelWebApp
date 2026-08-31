@@ -143,8 +143,8 @@ func TestCollectTelemetrySnapshot(t *testing.T) {
 	if mustFloat(s.MemAvg) != 55 || mustFloat(s.MemMax) != 60 {
 		t.Errorf("mem avg/max = %v/%v, want 55/60", s.MemAvg, s.MemMax)
 	}
-	if mustInt64(s.NetUp) != 3000 || mustInt64(s.NetDown) != 1000 {
-		t.Errorf("net up/down = %d/%d, want 3000/1000", mustInt64(s.NetUp), mustInt64(s.NetDown))
+	if mustInt64(s.NetUp) != 3000*historyBucket || mustInt64(s.NetDown) != 1000*historyBucket {
+		t.Errorf("net up/down = %d/%d, want %d/%d", mustInt64(s.NetUp), mustInt64(s.NetDown), 3000*historyBucket, 1000*historyBucket)
 	}
 	if mustInt(s.OnlineAvg) != 4 || mustInt(s.OnlineMax) != 5 {
 		t.Errorf("online avg/max = %d/%d, want 4/5", mustInt(s.OnlineAvg), mustInt(s.OnlineMax))

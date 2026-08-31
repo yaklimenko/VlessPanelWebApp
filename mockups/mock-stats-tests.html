@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VlessPanel · Статистика · Тестирование ключей (мок Этапа 3)</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+/* ═══════════ Базовые переменные — 1-в-1 с App.css ═══════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #21262d;
+  --text: #e6edf3;
+  --text-secondary: #8b949e;
+  --accent: #58a6ff;
+  --accent-hover: #79b8ff;
+  --accent-muted: rgba(88,166,255,.15);
+  --success: #3fb950;
+  --danger: #f85149;
+  --danger-faded: rgba(248,81,73,.15);
+  --warn: #d29922;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: 0 2px 8px rgba(0,0,0,.4);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+html, body { height: 100%; }
+body {
+  font-family: var(--font); background: var(--bg); color: var(--text);
+  font-size: 14px; line-height: 1.5; overflow: hidden;
+}
+input, button, select { font-family: inherit; font-size: inherit; color: inherit; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #30363d; }
+
+/* ═══════════ Layout: сайдбар + контент ═══════════ */
+.app { display: flex; height: 100vh; }
+.sidebar {
+  width: 200px; flex-shrink: 0; background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; z-index: 10;
+}
+.side-logo {
+  padding: 14px 16px; font-size: 15px; font-weight: 700; letter-spacing: -.3px;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.side-logo .accent { color: var(--accent); }
+.side-nav { padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.side-link {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  border-radius: var(--radius-sm); color: var(--text-secondary);
+  font-size: 13.5px; font-weight: 500; cursor: pointer; text-decoration: none;
+  transition: background .15s, color .15s; border: 1px solid transparent;
+}
+.side-link:hover { background: rgba(255,255,255,.04); color: var(--text); }
+.side-link.active {
+  background: var(--accent-muted); color: var(--accent);
+  font-weight: 600; border-color: rgba(88,166,255,.25);
+}
+.side-link .ico { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+.side-foot {
+  margin-top: auto; padding: 10px 16px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-secondary);
+}
+.main-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* ═══════════ Header — как в приложении ═══════════ */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
+.app-title { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
+.app-title .accent { color: var(--accent); }
+.app-version { font-size: 11px; color: var(--text-secondary); }
+
+/* ═══════════ Кнопки ═══════════ */
+.btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer;
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.btn:hover { background: #1c2333; border-color: var(--accent); }
+.btn-primary { background: var(--accent-muted); border-color: var(--accent); color: var(--accent); }
+.btn-primary:hover { background: rgba(88,166,255,.25); }
+.btn-success { color: var(--success); }
+.btn-success:hover { background: rgba(63,185,80,.15); border-color: var(--success); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* ═══════════ Табы страницы ═══════════ */
+.page-tabs {
+  display: flex; gap: 2px; padding: 0 20px;
+  border-bottom: 1px solid var(--border); background: var(--bg);
+  flex-shrink: 0;
+}
+.page-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 16px; font-size: 13.5px; color: var(--text-secondary);
+  cursor: pointer; text-decoration: none;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.page-tab:hover { color: var(--text); }
+.page-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* ═══════════ Контент ═══════════ */
+.stats-body { flex: 1; overflow-y: auto; padding: 16px 20px 28px; }
+.page-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.page-title { font-size: 15px; font-weight: 700; }
+.page-title .sub { font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-left: 8px; }
+.page-head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.filters { display: flex; align-items: center; gap: 8px; }
+.filters select {
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 12.5px; cursor: pointer; outline: none;
+}
+.filters select:focus { border-color: var(--accent); }
+
+/* Сводные карточки */
+.summary-cards {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;
+}
+.sum-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px;
+}
+.sum-card .num { font-size: 26px; font-weight: 700; letter-spacing: -.5px; line-height: 1.1; }
+.sum-card .num.danger { color: var(--danger); }
+.sum-card .num.warn { color: var(--warn); }
+.sum-card .num.ok { color: var(--success); }
+.sum-card .num.accent { color: var(--accent); }
+.sum-card .lbl { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.sum-card .hint { font-size: 11px; color: var(--text-secondary); opacity: .75; margin-top: 2px; }
+
+/* Тренд */
+.trend-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 16px;
+}
+.trend-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 8px; flex-wrap: wrap;
+}
+.trend-head h3 { font-size: 13px; font-weight: 600; }
+.trend-head .hint { font-size: 12px; color: var(--text-secondary); }
+#chart-trend { width: 100%; height: 200px; }
+
+/* Журнал прогонов */
+.log-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.log-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.log-head h3 { font-size: 13px; font-weight: 600; }
+.log-head .hint { font-size: 12px; color: var(--text-secondary); }
+.run-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.run-table th {
+  background: #0d1117; padding: 8px 12px; text-align: left; font-weight: 500;
+  color: var(--text-secondary); border-bottom: 1px solid var(--border);
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px;
+  position: sticky; top: 0; z-index: 2;
+}
+.run-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); }
+.run-table tr.run-row { cursor: pointer; transition: background .12s; }
+.run-table tr.run-row:hover td { background: rgba(255,255,255,.03); }
+.run-table tr.run-row.open td { background: rgba(88,166,255,.06); }
+.run-table tr.run-row.open td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.t-time { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.t-chev { color: var(--text-secondary); font-size: 10px; width: 24px; transition: transform .15s; }
+tr.run-row.open .t-chev { transform: rotate(90deg); color: var(--accent); }
+
+.st-ok { color: var(--success); font-weight: 600; }
+.st-partial { color: var(--warn); font-weight: 600; }
+.st-fail { color: var(--danger); font-weight: 600; }
+.c-ok { color: var(--success); font-weight: 600; }
+.c-fail { color: var(--danger); font-weight: 600; }
+.t-dur { color: var(--text-secondary); font-family: var(--mono); font-size: 11.5px; }
+
+/* Раскрывающаяся детализация */
+.detail-row td { padding: 0; background: var(--bg); border-bottom: 1px solid var(--border); }
+.detail-inner { padding: 12px 16px 14px; }
+.detail-head {
+  font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+}
+.detail-head b { color: var(--text); }
+.kr-list { display: flex; flex-direction: column; }
+.kr-row {
+  display: flex; align-items: center; gap: 10px; padding: 5px 8px;
+  border-radius: var(--radius-sm); font-size: 12.5px;
+}
+.kr-row:hover { background: rgba(255,255,255,.02); }
+.kr-row + .kr-row { border-top: 1px solid rgba(33,38,45,.6); }
+.kr-st { width: 22px; text-align: center; flex-shrink: 0; font-size: 13px; }
+.kr-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11.5px; color: var(--text); }
+.kr-svc { font-size: 11.5px; white-space: nowrap; width: 78px; text-align: center; }
+.kr-svc svg { vertical-align: -1px; }
+.kr-svc .g { color: var(--success); }
+.kr-svc .r { color: var(--danger); }
+.kr-svc .m { color: #6e7681; }
+.kr-lat { font-size: 11.5px; color: var(--text-secondary); font-family: var(--mono); width: 70px; text-align: right; white-space: nowrap; }
+.kr-lat.warn { color: var(--warn); }
+
+@media (max-width: 1000px) {
+  .summary-cards { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══════ Сайдбар ═══════ -->
+  <aside class="sidebar">
+    <div class="side-logo">Vless<span class="accent">Panel</span></div>
+    <nav class="side-nav">
+      <a class="side-link" href="mock-main.html"><span class="ico">🔑</span><span class="txt">Подписки</span></a>
+      <a class="side-link active" href="mock-stats-panels.html"><span class="ico">📊</span><span class="txt">Статистика</span></a>
+    </nav>
+    <div class="side-foot">мок Этапа 3 · сайдбар</div>
+  </aside>
+
+  <!-- ═══════ Контент ═══════ -->
+  <div class="main-wrap">
+
+    <!-- Шапка — как в приложении -->
+    <header class="header">
+      <div class="header-left">
+        <span class="app-title">Vless<span class="accent">Panel</span></span>
+        <button class="btn btn-danger btn-sm">– Панель</button>
+        <button class="btn btn-primary btn-sm">+ Панель</button>
+      </div>
+      <div class="header-right">
+        <button class="btn btn-sm">🔄 Перегенерировать все</button>
+        <button class="btn btn-sm btn-success">⟳ Синк с агрегатором</button>
+        <span class="app-version">v0.9.0</span>
+      </div>
+    </header>
+
+    <!-- Табы раздела Статистика -->
+    <div class="page-tabs">
+      <a class="page-tab" href="mock-stats-panels.html">📈 Панели</a>
+      <a class="page-tab active" href="mock-stats-tests.html">🧪 Тестирование ключей</a>
+    </div>
+
+    <div class="stats-body">
+      <div class="page-head">
+        <div class="page-title">Тестирование ключей<span class="sub">автопрогон каждые 4ч · подписка «Тестер»</span></div>
+        <div class="page-head-right">
+          <div class="filters">
+            <select><option>Все подписки</option><option>Тестер</option></select>
+            <select><option>Все статусы</option><option>ok</option><option>partial</option><option>failed</option></select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Сводные карточки -->
+      <div class="summary-cards">
+        <div class="sum-card">
+          <div class="num accent" id="sum-runs">—</div>
+          <div class="lbl">Всего прогонов</div>
+          <div class="hint" id="sum-runs-hint">за 7 дней</div>
+        </div>
+        <div class="sum-card">
+          <div class="num" id="sum-okpct">—</div>
+          <div class="lbl">Средний ok%</div>
+          <div class="hint">по всем ключам прогонов</div>
+        </div>
+        <div class="sum-card">
+          <div class="num danger" id="sum-fail">—</div>
+          <div class="lbl">FAIL ключей (7д)</div>
+          <div class="hint">из них xhttp-ключи — большинство</div>
+        </div>
+        <div class="sum-card">
+          <div class="num warn" id="sum-degraded">—</div>
+          <div class="lbl">DEGRADED ключей</div>
+          <div class="hint">высокая латентность / частичный отказ</div>
+        </div>
+      </div>
+
+      <!-- Тренд ok% -->
+      <div class="trend-box">
+        <div class="trend-head">
+          <h3>Тренд ok% по прогонам</h3>
+          <span class="hint">видна деградация во времени · 42 прогона · 25.08 — 31.08</span>
+        </div>
+        <div id="chart-trend"></div>
+      </div>
+
+      <!-- Журнал прогонов -->
+      <div class="log-box">
+        <div class="log-head">
+          <h3>Журнал прогонов</h3>
+          <span class="hint">клик по строке — детали по ключам</span>
+        </div>
+        <table class="run-table">
+          <thead>
+            <tr>
+              <th>Время (Томск)</th>
+              <th>Подписка</th>
+              <th>Статус</th>
+              <th>Всего</th>
+              <th>OK</th>
+              <th>FAIL</th>
+              <th>Длительность</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="run-tbody">
+            <!-- генерируется JS -->
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════ Генерация данных ═══════════ */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function pad(n) { return String(n).padStart(2, '0'); }
+function fmtDur(sec) {
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m + 'м ' + pad(s) + 'с';
+}
+
+const KEY_POOL = [
+  'FIN1-vless-xhttp-reality-Тестер',
+  'FIN1-vless-websocket-tls-Тестер',
+  'FIN1-vless-tcp-reality-Тестер',
+  'perMonth-tester',
+  'perMonthXhttp-Тестер',
+  'SW1-TCP-tester',
+  'SW1-XHTTP-tester',
+  'PL2-Vless-xhttp-tcp-Тестер',
+  'PL1-Vless-Xhttp-tcp-Tester',
+  'NL2-xHTTP-tester',
+  'NL2-TCP-tester',
+  'AntonNSKTEST',
+  'FriendFamily-tester',
+  'FF2-tester'
+];
+
+const RUNS = [];
+(function genRuns() {
+  const start = Date.UTC(2026, 7, 25, 3, 0); // 25.08 03:00 (Томск), шаг 4ч → 42 прогона до 31.08 23:00
+  for (let i = 0; i < 42; i++) {
+    const rnd = mulberry32(1000 + i * 7);
+    const t = start + i * 4 * 3600000;
+    const d = new Date(t);
+    const time = pad(d.getUTCDate()) + '.' + pad(d.getUTCMonth() + 1) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+
+    const total = 10 + Math.floor(rnd() * 3); // 10..12
+    let fail = 1 + Math.floor(rnd() * 3);     // 1..3 (деградация к концу периода)
+    if (i < 8) fail = Math.min(fail, 2);      // в начале чище
+    if (fail > total) fail = total;
+    const degraded = rnd() < 0.26 ? 1 : 0;
+    let ok = total - fail - degraded;
+    if (ok < 0) { fail = Math.max(0, total - degraded); ok = total - fail - degraded; if (ok < 0) { ok = 0; } }
+
+    const status = (fail === 0 && degraded === 0) ? 'ok' : 'partial';
+    const durSec = 80 + Math.floor(rnd() * 160);
+
+    const keys = [];
+    let fi = 0, di = 0;
+    for (let j = 0; j < total; j++) {
+      const label = KEY_POOL[(i * 3 + j * 5) % KEY_POOL.length];
+      let st;
+      if (fi < fail) { st = 'FAIL'; fi++; }
+      else if (di < degraded) { st = 'DEGRADED'; di++; }
+      else st = 'OK';
+      let lat;
+      if (st === 'FAIL') lat = null;
+      else if (st === 'DEGRADED') lat = 300 + Math.floor(rnd() * 100);
+      else lat = 50 + Math.floor(rnd() * 200);
+      let yt, ig;
+      if (st === 'FAIL') { yt = rnd() < 0.6 ? 'FAIL' : '—'; ig = rnd() < 0.6 ? 'FAIL' : '—'; }
+      else if (st === 'DEGRADED') { yt = rnd() < 0.5 ? 'OK' : 'FAIL'; ig = rnd() < 0.5 ? 'OK' : 'FAIL'; }
+      else { yt = rnd() < 0.92 ? 'OK' : (rnd() < 0.5 ? 'FAIL' : '—'); ig = rnd() < 0.92 ? 'OK' : (rnd() < 0.5 ? 'FAIL' : '—'); }
+      keys.push({ label, st, yt, ig, lat });
+    }
+    RUNS.push({ time, total, ok, fail, degraded, status, durSec, keys });
+  }
+})();
+
+/* ═══════════ Сводные карточки ═══════════ */
+const sumRuns = RUNS.length;
+const sumFail = RUNS.reduce((s, r) => s + r.fail, 0);
+const sumDeg = RUNS.reduce((s, r) => s + r.degraded, 0);
+const sumKeys = RUNS.reduce((s, r) => s + r.total, 0);
+const sumOk = RUNS.reduce((s, r) => s + r.ok, 0);
+const okPct = Math.round(sumOk / sumKeys * 100);
+
+document.getElementById('sum-runs').textContent = sumRuns;
+document.getElementById('sum-runs-hint').textContent = '25.08 — 31.08 · каждые 4ч';
+document.getElementById('sum-okpct').textContent = '~' + okPct + '%';
+document.getElementById('sum-fail').textContent = sumFail;
+document.getElementById('sum-degraded').textContent = sumDeg;
+
+/* ═══════════ Тренд ok% ═══════════ */
+const trendChart = echarts.init(document.getElementById('chart-trend'));
+const trendLabels = RUNS.map(r => r.time);
+const trendData = RUNS.map(r => +(r.ok / r.total * 100).toFixed(1));
+const avgOk = +(trendData.reduce((a, b) => a + b, 0) / trendData.length).toFixed(1);
+trendChart.setOption({
+  grid: { left: 46, right: 20, top: 30, bottom: 40 },
+  tooltip: {
+    trigger: 'axis',
+    backgroundColor: '#161b22', borderColor: '#21262d',
+    textStyle: { color: '#e6edf3', fontSize: 12 },
+    axisPointer: { type: 'cross', lineStyle: { color: 'rgba(139,148,158,.4)' }, label: { backgroundColor: '#21262d' } },
+    formatter: (ps) => {
+      const p = ps[0];
+      const run = RUNS[p.dataIndex];
+      return p.name + '<br/><b style="color:#58a6ff">ok%: ' + p.value + '%</b><br/>' +
+        run.total + ' ключей · ' + run.ok + ' OK · ' + run.fail + ' FAIL' + (run.degraded ? ' · ' + run.degraded + ' DEGRADED' : '') + '<br/>статус: ' + run.status;
+    }
+  },
+  dataZoom: [
+    { type: 'inside' },
+    {
+      type: 'slider', height: 14, bottom: 4,
+      borderColor: '#21262d', backgroundColor: 'rgba(22,27,34,.7)',
+      fillerColor: 'rgba(88,166,255,.18)',
+      handleStyle: { color: '#58a6ff' }, moveHandleStyle: { color: '#21262d' },
+      textStyle: { color: '#8b949e', fontSize: 10 },
+      dataBackground: { lineStyle: { color: '#30363d' }, areaStyle: { color: 'rgba(48,54,61,.3)' } }
+    }
+  ],
+  xAxis: {
+    type: 'category', data: trendLabels,
+    axisLine: { lineStyle: { color: '#21262d' } },
+    axisTick: { show: false },
+    axisLabel: { color: '#8b949e', fontSize: 10, hideOverlap: true }
+  },
+  yAxis: {
+    type: 'value', name: 'ok%', min: 50, max: 100,
+    nameTextStyle: { color: '#8b949e', fontSize: 10 },
+    axisLabel: { color: '#8b949e', fontSize: 10 },
+    splitLine: { lineStyle: { color: 'rgba(33,38,45,.7)' } }
+  },
+  series: [{
+    name: 'ok%', type: 'line', data: trendData,
+    smooth: true, symbol: 'none',
+    lineStyle: { width: 2, color: '#58a6ff' },
+    itemStyle: { color: '#58a6ff' },
+    areaStyle: { color: 'rgba(88,166,255,.12)' },
+    markLine: {
+      silent: true, symbol: 'none',
+      lineStyle: { color: '#d29922', type: 'dashed', width: 1 },
+      label: { formatter: 'avg ' + avgOk + '%', color: '#d29922', fontSize: 10, position: 'insideEndTop' },
+      data: [{ yAxis: avgOk }]
+    }
+  }]
+});
+
+/* ═══════════ Журнал прогонов ═══════════ */
+const tbody = document.getElementById('run-tbody');
+const ICONS = { OK: '✅', FAIL: '❌', DEGRADED: '⚠️' };
+const CLS = { OK: 'g', FAIL: 'r', DEGRADED: 'm' };
+
+function svcCell(v) {
+  const cls = v === 'OK' ? 'g' : (v === 'FAIL' ? 'r' : 'm');
+  return '<span class="' + cls + '">' + v + '</span>';
+}
+
+RUNS.forEach((run, i) => {
+  const stCls = run.status === 'ok' ? 'st-ok' : (run.status === 'partial' ? 'st-partial' : 'st-fail');
+  const stTxt = run.status === 'ok' ? '✅ ok' : (run.status === 'partial' ? '🟡 partial' : '❌ failed');
+
+  const tr = document.createElement('tr');
+  tr.className = 'run-row';
+  tr.innerHTML =
+    '<td class="t-time">' + run.time + '</td>' +
+    '<td>Тестер</td>' +
+    '<td><span class="' + stCls + '">' + stTxt + '</span></td>' +
+    '<td>' + run.total + '</td>' +
+    '<td class="c-ok">' + run.ok + '</td>' +
+    '<td class="c-fail">' + run.fail + '</td>' +
+    '<td class="t-dur">' + fmtDur(run.durSec) + '</td>' +
+    '<td class="t-chev">▶</td>';
+
+  const det = document.createElement('tr');
+  det.className = 'detail-row';
+  det.style.display = 'none';
+  const rows = run.keys.map(k => {
+    const lat = k.lat === null ? '—' : k.lat + ' ms';
+    return '<div class="kr-row">' +
+      '<span class="kr-st" title="' + k.st + '">' + ICONS[k.st] + '</span>' +
+      '<span class="kr-label" title="' + k.label + '">' + k.label + '</span>' +
+      '<span class="kr-svc">YT: ' + svcCell(k.yt) + '</span>' +
+      '<span class="kr-svc">IG: ' + svcCell(k.ig) + '</span>' +
+      '<span class="kr-lat' + (k.st === 'DEGRADED' ? ' warn' : '') + '">' + lat + '</span>' +
+      '</div>';
+  }).join('');
+  det.innerHTML =
+    '<td colspan="8"><div class="detail-inner">' +
+    '<div class="detail-head">' +
+    '<span>Ключи прогона · <b>' + run.time + '</b></span>' +
+    '<span><b class="c-ok">' + run.ok + '</b> OK</span>' +
+    '<span><b class="c-fail">' + run.fail + '</b> FAIL</span>' +
+    (run.degraded ? '<span><b style="color:var(--warn)">' + run.degraded + '</b> DEGRADED</span>' : '') +
+    '<span>длительность: <b>' + fmtDur(run.durSec) + '</b></span>' +
+    '</div>' +
+    '<div class="kr-list">' + rows + '</div>' +
+    '</div></td>';
+
+  tr.addEventListener('click', () => {
+    const open = tr.classList.toggle('open');
+    det.style.display = open ? '' : 'none';
+  });
+
+  tbody.appendChild(tr);
+  tbody.appendChild(det);
+});
+
+window.addEventListener('resize', () => trendChart.resize());
+</script>
+</body>
+</html>
