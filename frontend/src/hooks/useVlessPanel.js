@@ -126,6 +126,18 @@ export function useVlessPanel() {
       .catch(err => showToast('⚠️ ' + err.message));
   };
 
+  // ─── Rename panel (меняется только name; panelId остаётся — кейсорцы/подписки не ломаются) ───
+  const handleRenamePanel = (panelId, name) => {
+    if (!panelId) return;
+    api.updatePanel(panelId, { name })
+      .then(updated => {
+        setPanels(prev => prev.map(p => (p.id === updated.id ? updated : p)));
+        showToast('✏️ Панель переименована');
+        loadData();
+      })
+      .catch(err => showToast('⚠️ ' + err.message));
+  };
+
   const handleCreateClient = (data) => {
     if (!currentPanelId) return;
     api.createClient(currentPanelId, data)
@@ -461,7 +473,7 @@ export function useVlessPanel() {
     activeSub, activeSubKeys, panel, filteredClients, sortedPanels, ksCountByPanel,
     keySourceById, sortedSubs, testableCount,
     loadData, showToast,
-    handleAddPanel, handleDeletePanel, handleCreateClient, handleAttachInbound,
+    handleAddPanel, handleDeletePanel, handleRenamePanel, handleCreateClient, handleAttachInbound,
     handleDetachInbound, handleUpdateClient, copyToClipboard, handleChipClick,
     handleAddManualKS, addKeySourceToSub, handleNewSub, handleGenerate,
     handleRemoveKey, copyKSKey, handleTestKS, handleTestSub, handleDeleteSub,

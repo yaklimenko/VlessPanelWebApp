@@ -38,6 +38,7 @@ const (
 const (
 	msgLoadPanelsFailed   = "Не удалось загрузить панели"
 	msgCreatePanelFailed  = "Не удалось создать панель"
+	msgRenamePanelFailed  = "Не удалось переименовать панель"
 	msgListClientsFailed  = "Не удалось получить список клиентов"
 	msgCreateClientFailed = "Не удалось создать клиента"
 	msgGetKeysFailed      = "Не удалось получить ключи"

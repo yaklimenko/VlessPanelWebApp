@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -194,6 +195,40 @@ func TestSubscriptionFileRejectsUnsafeNames(t *testing.T) {
 	}
 	if raw, err := s.GetSubscriptionRaw("ok-name"); err != nil || raw != "vless://x\n" {
 		t.Fatalf("valid read failed: %q, %v", raw, err)
+	}
+}
+
+// UpdatePanelName должен менять только Name (url/token/webBasePath не трогаем)
+// и возвращать ErrPanelNotFound для несуществующего ID.
+func TestUpdatePanelName(t *testing.T) {
+	s := newTestStorage(t)
+	if _, err := s.AddPanel(dto.CreatePanelRequest{Name: "Old Name", URL: "https://x:1", Token: "t", WebBasePath: "/path"}); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := s.UpdatePanelName("old-name", "New Name")
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.ID != "old-name" || updated.Name != "New Name" {
+		t.Fatalf("updated = %+v", updated)
+	}
+
+	// Соединительные поля не должны измениться.
+	panel, err := s.GetPanel("old-name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if panel.Name != "New Name" {
+		t.Fatalf("name not persisted: %q", panel.Name)
+	}
+	if panel.URL != "https://x:1" || panel.Token != "t" || panel.WebBasePath != "/path" {
+		t.Fatalf("connection fields changed: %+v", panel)
+	}
+
+	// Несуществующий ID → ErrPanelNotFound.
+	if _, err := s.UpdatePanelName("ghost", "X"); !errors.Is(err, ErrPanelNotFound) {
+		t.Fatalf("expected ErrPanelNotFound, got %v", err)
 	}
 }
 

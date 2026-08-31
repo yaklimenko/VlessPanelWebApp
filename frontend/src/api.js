@@ -56,6 +56,7 @@ export const api = {
   // Panels
   listPanels: () => request('/panels'),
   createPanel: (data) => request('/panels', { method: 'POST', body: JSON.stringify(data) }),
+  updatePanel: (id, data) => request(`/panels/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePanel: (id) => request(`/panels/${id}`, { method: 'DELETE' }),
   listClients: (panelId) => request(`/panels/${panelId}/clients`),
   createClient: (panelId, data) => request(`/panels/${panelId}/clients`, { method: 'POST', body: JSON.stringify(data) }),

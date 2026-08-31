@@ -99,6 +99,7 @@ func main() {
 		r.Post("/panels/{id}/clients/{email}/detach", handlers.DetachInbound)
 		r.Post("/panels/{id}/clients/{email}/update", handlers.UpdateClient)
 		r.Post("/panels/{id}/inbounds", handlers.ListInbounds)
+		r.Put("/panels/{id}", handlers.UpdatePanel)
 		r.Delete("/panels/{id}", handlers.DeletePanel)
 
 		// Subscriptions

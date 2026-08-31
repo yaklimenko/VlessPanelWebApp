@@ -4,7 +4,7 @@ import {
   ToastProvider,
   Header, Sidebar, ClientCard, StatsPage,
   NewSubModal, KSDetailsModal, DeleteSubModal, DeleteKSModal, ReportModal,
-  AddPanelModal, AddClientModal, AddManualKSModal, EditClientModal,
+  AddPanelModal, AddClientModal, AddManualKSModal, EditClientModal, EditPanelNameModal,
 } from './components';
 import { SubscriptionDetail } from './components/SubscriptionDetail';
 import { AuthGate } from './components/AuthGate';
@@ -29,12 +29,19 @@ function AppInner() {
     activeSub, activeSubKeys, panel, filteredClients, sortedPanels, ksCountByPanel,
     keySourceById, sortedSubs, testableCount,
     loadData, showToast,
-    handleAddPanel, handleDeletePanel, handleCreateClient, handleAttachInbound,
+    handleAddPanel, handleDeletePanel, handleRenamePanel, handleCreateClient, handleAttachInbound,
     handleDetachInbound, handleUpdateClient, copyToClipboard, handleChipClick,
     handleAddManualKS, handleNewSub, handleGenerate, handleRemoveKey, copyKSKey,
     handleTestKS, handleTestSub, handleDeleteSub, handleDeleteKS,
     handleRegenerateAll, handleSyncAll,
   } = useVlessPanel();
+
+  const [renamingPanel, setRenamingPanel] = useState(null);
+  const submitRenamePanel = (name) => {
+    if (!renamingPanel) return;
+    handleRenamePanel(renamingPanel.id, name);
+    setRenamingPanel(null);
+  };
 
   return (
     <div className="app">
@@ -47,6 +54,7 @@ function AppInner() {
           onPanelChange={setCurrentPanelId}
           onAddPanel={() => setShowAddPanel(true)}
           onDeletePanel={handleDeletePanel}
+          onRenamePanel={() => setRenamingPanel(panels.find(p => p.id === currentPanelId) || null)}
           onSyncAll={handleSyncAll}
           syncing={syncing}
           onRegenerateAll={handleRegenerateAll}
@@ -210,6 +218,7 @@ function AppInner() {
 
         {/* ─── Modals ─── */}
       {showAddPanel && <AddPanelModal onClose={() => setShowAddPanel(false)} onSubmit={handleAddPanel} />}
+      {renamingPanel && <EditPanelNameModal panel={renamingPanel} onClose={() => setRenamingPanel(null)} onSubmit={submitRenamePanel} />}
       {showAddClient && <AddClientModal inbounds={inbounds} onClose={() => setShowAddClient(false)} onSubmit={handleCreateClient} />}
       {showAddManualKS && (
         <AddManualKSModal

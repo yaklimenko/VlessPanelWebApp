@@ -1,9 +1,10 @@
-export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onDeletePanel, onSyncAll, syncing, onRegenerateAll, regenerating, activeView = 'subscriptions' }) {
+export function Header({ panels, selectedPanelId, onPanelChange, onAddPanel, onDeletePanel, onRenamePanel, onSyncAll, syncing, onRegenerateAll, regenerating, activeView = 'subscriptions' }) {
   return (
     <header className="header">
       <div className="header-left">
         <span className="app-title">Vless<span className="accent">Panel</span></span>
         <button className="btn btn-danger btn-sm" disabled={panels.length === 0} onClick={onDeletePanel}>– Панель</button>
+        <button className="btn btn-icon btn-sm" title="Переименовать панель" disabled={panels.length === 0} onClick={onRenamePanel}>✏️</button>
         <button className="btn btn-primary btn-sm" onClick={onAddPanel}>+ Панель</button>
       </div>
       <div className="header-right">

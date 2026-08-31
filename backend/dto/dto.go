@@ -41,6 +41,12 @@ type CreatePanelRequest struct {
 	InsecureSkipVerify bool   `json:"insecureSkipVerify,omitempty"`
 }
 
+// UpdatePanelRequest is the request body for PUT /api/panels/{id}
+// (переименование — меняется только name).
+type UpdatePanelRequest struct {
+	Name string `json:"name"`
+}
+
 // CreateClientRequest is the request body for creating a client
 type CreateClientRequest struct {
 	Email      string `json:"email"`

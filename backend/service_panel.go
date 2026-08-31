@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"log"
+	"strings"
 	"time"
 
 	"vlesspanel/dto"
@@ -39,6 +41,23 @@ func (s *PanelService) Create(req dto.CreatePanelRequest) (model.Panel, error) {
 
 func (s *PanelService) Delete(id string) error {
 	return s.storage.DeletePanel(id)
+}
+
+// Rename переименовывает панель (меняется только Name, panelId не трогаем —
+// кейсорцы и подписки ссылаются на панель по ID).
+func (s *PanelService) Rename(id, name string) (model.Panel, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return model.Panel{}, errBadRequest(msgNameRequired)
+	}
+	panel, err := s.storage.UpdatePanelName(id, name)
+	if err != nil {
+		if errors.Is(err, ErrPanelNotFound) {
+			return model.Panel{}, err
+		}
+		return model.Panel{}, errInternal(msgRenamePanelFailed)
+	}
+	return panel, nil
 }
 
 func (s *PanelService) ListClients(panelID string) ([]model.Client, error) {

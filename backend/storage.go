@@ -174,6 +174,28 @@ func (s *Storage) AddPanel(req dto.CreatePanelRequest) (model.Panel, error) {
 	return panel, nil
 }
 
+// UpdatePanelName переименовывает панель по ID (атомарный read-modify-write).
+// Возвращает обновлённую панель. Панель не найдена → ErrPanelNotFound.
+func (s *Storage) UpdatePanelName(id, name string) (model.Panel, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	panels, err := s.loadPanelsLocked()
+	if err != nil {
+		return model.Panel{}, err
+	}
+	for i := range panels {
+		if panels[i].ID == id {
+			panels[i].Name = name
+			if err := s.savePanelsLocked(panels); err != nil {
+				return model.Panel{}, err
+			}
+			return panels[i], nil
+		}
+	}
+	return model.Panel{}, fmt.Errorf("%w: %s", ErrPanelNotFound, id)
+}
+
 // DeletePanel removes a panel by ID (atomic read-modify-write).
 func (s *Storage) DeletePanel(id string) error {
 	s.mu.Lock()

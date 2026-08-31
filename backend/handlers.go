@@ -105,6 +105,22 @@ func (h *Handlers) DeletePanel(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// UpdatePanel переименовывает панель: принимает { "name": "..." } и меняет
+// только название (panelId/url/token не трогаются).
+func (h *Handlers) UpdatePanel(w http.ResponseWriter, r *http.Request) {
+	var req dto.UpdatePanelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, msgInvalidBody)
+		return
+	}
+	panel, err := h.panels.Rename(chi.URLParam(r, "id"), req.Name)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, panel)
+}
+
 // --- Client Handlers ---
 
 func (h *Handlers) ListClients(w http.ResponseWriter, r *http.Request) {

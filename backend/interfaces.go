@@ -20,6 +20,7 @@ type Repository interface {
 	LoadPanels() ([]model.Panel, error)
 	GetPanel(id string) (model.Panel, error)
 	AddPanel(req dto.CreatePanelRequest) (model.Panel, error)
+	UpdatePanelName(id, name string) (model.Panel, error)
 	DeletePanel(id string) error
 
 	// key sources

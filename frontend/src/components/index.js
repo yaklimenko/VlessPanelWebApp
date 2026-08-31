@@ -13,6 +13,7 @@ export { DeleteSubModal } from './DeleteSubModal';
 export { DeleteKSModal } from './DeleteKSModal';
 export { ReportModal } from './ReportModal';
 export { AddPanelModal } from './AddPanelModal';
+export { EditPanelNameModal } from './EditPanelNameModal';
 export { AddManualKSModal } from './AddManualKSModal';
 export { AddClientModal } from './AddClientModal';
 export { EditClientModal } from './EditClientModal';
