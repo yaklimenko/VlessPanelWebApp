@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/url"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,10 @@ const (
 	telemetryWindow   = 5 * time.Minute    // окно агрегации снапшота
 	backfillRunsSince = 7 * 24 * time.Hour // стартовый забор прогонов
 )
+
+// snapshotWindowSec — длина окна снапшота в секундах (5 минут). Точки истории
+// группируются по бакетам этой длины: bucketTS = t / snapshotWindowSec * snapshotWindowSec.
+const snapshotWindowSec = int64(telemetryWindow / time.Second)
 
 // historyMetrics — метрики, которые панель держит в истории (avg+max считаем САМИ).
 // swap/disk/open_conns/xray_ok в истории нет — берём из server/status.
@@ -275,15 +280,16 @@ func (c *MetricsCollector) fetchHistory(p model.Panel) (map[string][]xui.History
 }
 
 // lastSeen возвращает последний потреблённый ts истории панели. При первом
-// контакте (нет ни памяти, ни строк в БД) — начало текущего окна минус 1 сек,
-// чтобы взять точки текущего окна (t >= windowStart), но не схлопнуть в одну
-// строку всю 6-часовую историю панели. После рестарта — максимум строки БД
-// (инкрементальный догон пропущенного).
+// контакте (нет ни памяти, ни строк в БД) — 6 часов назад: 3X-UI хранит
+// ~6 часов истории, забираем её ВСЮ и разбиваем на 5-минутные окна, чтобы
+// график с самого старта был полным, а не из одного окна. После рестарта —
+// максимум строки БД (инкрементальный догон пропущенного), он же перекрывает
+// 6-часовую глубину (строки БД всегда свежее).
 func (c *MetricsCollector) lastSeen(panelID string, windowStart int64) int64 {
 	if ts, ok := c.lastTS[panelID]; ok {
 		return ts
 	}
-	ts := windowStart - 1
+	ts := windowStart - 6*3600
 	if maxTS, ok := c.db.MaxSnapshotTS(panelID); ok && maxTS > ts {
 		ts = maxTS
 	}
@@ -372,24 +378,42 @@ func intPtr(v int) *int { return &v }
 
 func int64Ptr(v int64) *int64 { return &v }
 
-// writeSnapshots агрегирует все новые точки истории (t > lastSeen) в ОДНО
-// окно — начало окна сбора (row.ts = floor(now/5мин)). Так каждый цикл даёт
-// ровно одну строку на панель, строки не затирают друг друга (точки хвоста
-// прошлого окна приписываются текущему — за 5 минут их ровно ~5 штук).
-// Поля, которых нет в истории (swap/disk/open_conns/xray_ok + кумулятивные
-// netTraffic) — из server/status. lastSeen продвигается только при записи.
+// writeSnapshots агрегирует новые точки истории (t > lastSeen) по 5-минутным
+// бакетам (bucketTS = t / 300 * 300) и пишет по строке на каждый бакет — так
+// при первом контакте забирается вся 6-часовая история панели (~72 окна), а не
+// только текущее. Бакеты пишутся от старых к новым; INSERT OR REPLACE по
+// UNIQUE(panel_id, ts) делает повторную запись бакета идемпотентной (пришла
+// новая точка в уже записанное окно — строка перезаписывается более полной
+// агрегацией, дублей нет). Поля, которых нет в истории (swap/disk/open_conns/
+// xray_ok + кумулятивные netTraffic), — только в самом свежем бакете
+// (server/status — это текущий момент), у старых — nil/дефолт (xray_ok=1).
+// lastSeen продвигается до максимального ts точки только при успешной записи.
 func (c *MetricsCollector) writeSnapshots(p model.Panel, st *xui.ServerStatus, points map[string][]xui.HistoryPoint, now time.Time) (SnapshotRecord, bool, error) {
 	windowStart := now.UTC().Truncate(telemetryWindow).Unix()
 	lastSeen := c.lastSeen(p.ID, windowStart)
 
-	agg := &windowAgg{}
+	// Бакет с точками истории (windowAgg на каждое 5-минутное окно).
+	type bucket struct {
+		agg  *windowAgg
+		maxT int64
+	}
+	buckets := map[int64]*bucket{}
 	var maxT int64
 	for metric, pts := range points {
 		for _, pt := range pts {
 			if pt.T <= lastSeen {
 				continue
 			}
-			agg.add(metric, pt.V)
+			bts := pt.T / snapshotWindowSec * snapshotWindowSec
+			b := buckets[bts]
+			if b == nil {
+				b = &bucket{agg: &windowAgg{}}
+				buckets[bts] = b
+			}
+			b.agg.add(metric, pt.V)
+			if pt.T > b.maxT {
+				b.maxT = pt.T
+			}
 			if pt.T > maxT {
 				maxT = pt.T
 			}
@@ -400,40 +424,59 @@ func (c *MetricsCollector) writeSnapshots(p model.Panel, st *xui.ServerStatus, p
 		return SnapshotRecord{}, false, nil // новых точек нет — не пишем пустые окна
 	}
 
+	// Сортируем бакеты по возрастанию ts: старые окна пишем раньше новых.
+	tsList := make([]int64, 0, len(buckets))
+	for bts := range buckets {
+		tsList = append(tsList, bts)
+	}
+	sort.Slice(tsList, func(i, j int) bool { return tsList[i] < tsList[j] })
+
 	xrayOK := 1
 	if st.Xray.State != "" && st.Xray.State != "running" {
 		xrayOK = 0
 	}
 
-	rec := SnapshotRecord{
-		PanelID:        p.ID,
-		TS:             windowStart,
-		CPUAvg:         avg(agg.cpuSum, agg.cpuN),
-		CPUMax:         maxOrNil(agg.cpuMax, agg.cpuN),
-		MemAvg:         avg(agg.memSum, agg.memN),
-		MemMax:         maxOrNil(agg.memMax, agg.memN),
-		SwapAvg:        percentOf(st.Swap.Current, st.Swap.Total),
-		Load1Avg:       avg(agg.load1Sum, agg.load1N),
-		Load5Avg:       avg(agg.load5Sum, agg.load5N),
-		Load15Avg:      avg(agg.load15Sum, agg.load15N),
-		NetUp:          int64Ptr(agg.netUpSum * historyBucket),
-		NetDown:        int64Ptr(agg.netDownSum * historyBucket),
-		NetTrafficSent: int64Ptr(st.NetIO.Up),
-		NetTrafficRecv: int64Ptr(st.NetIO.Down),
-		DiskUsed:       int64Ptr(st.Disk.Current),
-		DiskTotal:      int64Ptr(st.Disk.Total),
-		OnlineAvg:      roundIntPtr(avgOrZero(agg.onlineSum, agg.onlineN), agg.onlineN),
-		OnlineMax:      roundIntPtr(agg.onlineMax, agg.onlineN),
-		OpenConnsMax:   intPtr(st.TCPCount),
-		XrayOK:         xrayOK,
-	}
-	if err := c.db.InsertSnapshot(rec); err != nil {
-		return SnapshotRecord{}, false, err
+	freshTS := tsList[len(tsList)-1] // ближайший к now бакет — статус панели актуален только для него
+	var lastRec SnapshotRecord
+	wrote := false
+	for _, bts := range tsList {
+		b := buckets[bts]
+		rec := SnapshotRecord{
+			PanelID:   p.ID,
+			TS:        bts,
+			CPUAvg:    avg(b.agg.cpuSum, b.agg.cpuN),
+			CPUMax:    maxOrNil(b.agg.cpuMax, b.agg.cpuN),
+			MemAvg:    avg(b.agg.memSum, b.agg.memN),
+			MemMax:    maxOrNil(b.agg.memMax, b.agg.memN),
+			Load1Avg:  avg(b.agg.load1Sum, b.agg.load1N),
+			Load5Avg:  avg(b.agg.load5Sum, b.agg.load5N),
+			Load15Avg: avg(b.agg.load15Sum, b.agg.load15N),
+			NetUp:     int64Ptr(b.agg.netUpSum * historyBucket),
+			NetDown:   int64Ptr(b.agg.netDownSum * historyBucket),
+			OnlineAvg: roundIntPtr(avgOrZero(b.agg.onlineSum, b.agg.onlineN), b.agg.onlineN),
+			OnlineMax: roundIntPtr(b.agg.onlineMax, b.agg.onlineN),
+			XrayOK:    1,
+		}
+		if bts == freshTS {
+			// server/status — текущий момент, поэтому только в самом свежем окне.
+			rec.SwapAvg = percentOf(st.Swap.Current, st.Swap.Total)
+			rec.NetTrafficSent = int64Ptr(st.NetIO.Up)
+			rec.NetTrafficRecv = int64Ptr(st.NetIO.Down)
+			rec.DiskUsed = int64Ptr(st.Disk.Current)
+			rec.DiskTotal = int64Ptr(st.Disk.Total)
+			rec.OpenConnsMax = intPtr(st.TCPCount)
+			rec.XrayOK = xrayOK
+		}
+		if err := c.db.InsertSnapshot(rec); err != nil {
+			return SnapshotRecord{}, false, err
+		}
+		lastRec = rec
+		wrote = true
 	}
 
 	// Продвигаем lastSeen только после успешной записи.
 	c.lastTS[p.ID] = maxT
-	return rec, true, nil
+	return lastRec, wrote, nil
 }
 
 // roundIntPtr округляет v до int; при n==0 возвращает nil.

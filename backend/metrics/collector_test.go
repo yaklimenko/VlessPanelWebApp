@@ -162,6 +162,9 @@ func TestCollectTelemetrySnapshot(t *testing.T) {
 }
 
 // Инкрементальный забор: второй цикл берёт только новые точки, строки не дублируются.
+// Бакет определяется по ts точки, поэтому хвост 12:07/12:08 попадает в уже записанное
+// окно 12:05 (строка перезаписывается INSERT OR REPLACE более полной агрегацией),
+// а 12:10/12:11 — в новое окно 12:10.
 func TestCollectTelemetryIncremental(t *testing.T) {
 	now1 := time.Date(2026, 8, 31, 12, 7, 0, 0, time.UTC)
 	base1 := time.Date(2026, 8, 31, 12, 5, 0, 0, time.UTC).Unix()
@@ -171,30 +174,114 @@ func TestCollectTelemetryIncremental(t *testing.T) {
 
 	c.collectTelemetry(now1)
 
-	// Второй цикл: панель отдаёт полную историю (как настоящая), новые точки — 12:07..12:11.
+	// Второй цикл: панель отдаёт полную историю (как настоящая). Новые точки:
+	// 12:07/12:08 (cpu 100) → окно 12:05 (перезапись), 12:10/12:11 (cpu 200) → окно 12:10.
 	base2 := time.Date(2026, 8, 31, 12, 10, 0, 0, time.UTC).Unix()
 	h2 := map[string][]xui.HistoryPoint{}
 	for m, pts := range fullHistory(base1) {
-		h2[m] = append(append([]xui.HistoryPoint{}, pts...), xui.HistoryPoint{T: base1 + 120, V: 100}, xui.HistoryPoint{T: base1 + 180, V: 100})
+		h2[m] = append(append([]xui.HistoryPoint{}, pts...),
+			xui.HistoryPoint{T: base1 + 120, V: 100}, xui.HistoryPoint{T: base1 + 180, V: 100},
+			xui.HistoryPoint{T: base1 + 300, V: 200}, xui.HistoryPoint{T: base1 + 360, V: 200})
 	}
-	// Точки из окон 12:05/12:10 не должны задваивать значения предыдущей строки.
 	tel.history = h2
 	c.collectTelemetry(time.Date(2026, 8, 31, 12, 12, 0, 0, time.UTC))
 
 	rows, _ := db.Snapshots("one", 0, time.Date(2026, 8, 31, 13, 0, 0, 0, time.UTC).Unix())
 	if len(rows) != 2 {
-		t.Fatalf("снапшотов %d, want 2 (инкрементально)", len(rows))
+		t.Fatalf("снапшотов %d, want 2 (инкрементально, без дублей)", len(rows))
 	}
 	if rows[0].TS != base1 || rows[1].TS != base2 {
 		t.Errorf("ts строк: %d, %d; want %d, %d", rows[0].TS, rows[1].TS, base1, base2)
 	}
-	// Первая строка не тронута (была записана первым циклом).
-	if mustFloat(rows[0].CPUAvg) != 15 {
-		t.Errorf("первая строка перезаписана: cpu=%v", rows[0].CPUAvg)
+	// Окно 12:05 перезаписано новыми точками бакета (100,100 → avg 100), старые
+	// точки (10,20) не пересчитаны — иначе avg был бы 57.5 (инкрементальность).
+	if mustFloat(rows[0].CPUAvg) != 100 {
+		t.Errorf("окно 12:05 cpu = %v, want 100 (только новые точки бакета)", rows[0].CPUAvg)
 	}
-	// Вторая строка — только новые точки (12:10..12:11): cpu 100,100 → avg 100.
-	if mustFloat(rows[1].CPUAvg) != 100 {
-		t.Errorf("вторая строка cpu = %v, want 100", rows[1].CPUAvg)
+	// Новое окно 12:10 — только его точки: cpu 200,200 → avg 200.
+	if mustFloat(rows[1].CPUAvg) != 200 {
+		t.Errorf("окно 12:10 cpu = %v, want 200", rows[1].CPUAvg)
+	}
+	// Свежее окно несёт поля из server/status.
+	if mustFloat(rows[1].SwapAvg) != 25 {
+		t.Errorf("окно 12:10 swap = %v, want 25%%", rows[1].SwapAvg)
+	}
+}
+
+// Первый контакт с панелью: история за ~2-3 окна (11:55, 12:00, 12:05) → строка
+// на каждое окно; у старых полей из server/status нет (nil, xray_ok=1), у самого
+// свежего — есть. Повторный цикл с той же историей не дублирует строки.
+func TestCollectTelemetryFirstContactFullHistory(t *testing.T) {
+	now := time.Date(2026, 8, 31, 12, 7, 0, 0, time.UTC) // окно 12:05
+	base := time.Date(2026, 8, 31, 12, 5, 0, 0, time.UTC).Unix()
+
+	ts := []int64{base - 600, base - 300, base, base + 60} // 11:55, 12:00, 12:05×2
+	mk := func(vals ...float64) []xui.HistoryPoint {
+		pts := make([]xui.HistoryPoint, 0, len(ts))
+		for i, t := range ts {
+			pts = append(pts, xui.HistoryPoint{T: t, V: vals[i]})
+		}
+		return pts
+	}
+	tel := &fakeTelemetry{status: testStatus(), history: map[string][]xui.HistoryPoint{
+		"cpu":     mk(10, 20, 30, 40),
+		"mem":     mk(50, 60, 70, 80),
+		"netUp":   mk(1000, 2000, 3000, 4000),
+		"netDown": mk(500, 500, 500, 500),
+		"online":  mk(3, 5, 7, 9),
+		"load1":   mk(1.0, 2.0, 3.0, 4.0),
+		"load5":   mk(0.5, 0.6, 0.7, 0.8),
+		"load15":  mk(0.25, 0.3, 0.35, 0.4),
+	}}
+	c, db, _ := newCollectorFixture(t, tel, nil, &fakeDaemon{})
+
+	c.collectTelemetry(now)
+
+	rows, err := db.Snapshots("one", 0, now.Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("снапшотов %d, want 3 (по строке на окно 11:55/12:00/12:05)", len(rows))
+	}
+	if rows[0].TS != base-600 || rows[1].TS != base-300 || rows[2].TS != base {
+		t.Fatalf("ts строк: %d, %d, %d; want %d, %d, %d", rows[0].TS, rows[1].TS, rows[2].TS, base-600, base-300, base)
+	}
+
+	// Старые окна: агрегаты из истории, полей из status нет (nil, xray_ok=1).
+	if mustFloat(rows[0].CPUAvg) != 10 || mustInt64(rows[0].NetUp) != 1000*historyBucket {
+		t.Errorf("окно 11:55 cpu/net_up = %v/%d, want 10/%d", rows[0].CPUAvg, mustInt64(rows[0].NetUp), 1000*historyBucket)
+	}
+	if rows[0].SwapAvg != nil || rows[0].DiskUsed != nil || rows[0].DiskTotal != nil ||
+		rows[0].NetTrafficSent != nil || rows[0].NetTrafficRecv != nil || rows[0].OpenConnsMax != nil {
+		t.Errorf("окно 11:55: поля из status не nil: %+v", rows[0])
+	}
+	if rows[0].XrayOK != 1 {
+		t.Errorf("окно 11:55 xray_ok = %d, want 1", rows[0].XrayOK)
+	}
+	if mustFloat(rows[1].CPUAvg) != 20 || rows[1].SwapAvg != nil {
+		t.Errorf("окно 12:00 cpu/swap = %v/%v, want 20/nil", rows[1].CPUAvg, rows[1].SwapAvg)
+	}
+
+	// Свежее окно (12:05): две точки cpu 30,40 → avg 35/max 40 + поля из status.
+	if mustFloat(rows[2].CPUAvg) != 35 || mustFloat(rows[2].CPUMax) != 40 {
+		t.Errorf("окно 12:05 cpu avg/max = %v/%v, want 35/40", rows[2].CPUAvg, rows[2].CPUMax)
+	}
+	if mustInt64(rows[2].NetUp) != 7000*historyBucket || mustInt(rows[2].OnlineAvg) != 8 || mustInt(rows[2].OnlineMax) != 9 {
+		t.Errorf("окно 12:05 net_up/online = %d/%d/%d, want %d/8/9",
+			mustInt64(rows[2].NetUp), mustInt(rows[2].OnlineAvg), mustInt(rows[2].OnlineMax), 7000*historyBucket)
+	}
+	if mustFloat(rows[2].SwapAvg) != 25 || mustInt64(rows[2].DiskUsed) != 50<<30 || mustInt(rows[2].OpenConnsMax) != 42 {
+		t.Errorf("окно 12:05 поля из status: swap=%v disk=%d conns=%d, want 25/%%/537…/42",
+			rows[2].SwapAvg, mustInt64(rows[2].DiskUsed), mustInt(rows[2].OpenConnsMax))
+	}
+
+	// Повторный цикл с той же историей: новых точек нет (курсор lastTS на месте),
+	// строки не дублируются.
+	c.collectTelemetry(now.Add(5 * time.Minute)) // 12:12
+	rows, _ = db.Snapshots("one", 0, now.Add(6*time.Minute).Unix())
+	if len(rows) != 3 {
+		t.Fatalf("после повторного цикла снапшотов %d, want 3 (без дублей)", len(rows))
 	}
 }
 
