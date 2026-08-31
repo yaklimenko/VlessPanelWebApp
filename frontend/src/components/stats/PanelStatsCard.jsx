@@ -93,32 +93,33 @@ export function PanelStatsCard({ panel, range, availability }) {
     const conns = pts.map(p => num(p.openConnsMax));
     const last = pts[pts.length - 1];
 
-    // RAM
+    // RAM — шкала всегда 0–100
     const ramTip = { ...TOOLTIP, valueFormatter: (v) => (v == null ? '—' : Math.round(v) + ' %') };
     const ramChart = mkLineOpt(labels, [
       mkSeries('RAM avg %', ramAvg, '#58a6ff'),
       mkSeries('RAM max %', ramMax, '#d29922'),
-    ], 'RAM %', yMax([...ramAvg, ...ramMax], 60), ramTip);
+    ], 'RAM %', 100, ramTip);
 
-    // CPU
+    // CPU — шкала всегда 0–100
     const cpuTip = { ...TOOLTIP, valueFormatter: (v) => (v == null ? '—' : Math.round(v) + ' %') };
     const cpuChart = mkLineOpt(labels, [
       mkSeries('CPU avg %', cpuAvg, '#3fb950'),
       mkSeries('CPU max %', cpuMax, '#f85149'),
-    ], 'CPU %', yMax([...cpuAvg, ...cpuMax], 12), cpuTip);
+    ], 'CPU %', 100, cpuTip);
 
-    // Load
+    // Load — шкала всегда 0–100, тултип без дробей
+    const loadTip = { ...TOOLTIP, valueFormatter: (v) => (v == null ? '—' : Math.round(v)) };
     const loadChart = mkLineOpt(labels, [
       mkSeries('load1', load1, '#58a6ff'),
       mkSeries('load5', load5, '#d29922'),
       mkSeries('load15', load15, '#8b949e'),
-    ], 'load', yMax([...load1, ...load5, ...load15], 0.4));
+    ], 'load', 100, loadTip);
 
-    // Сеть (KB/s, area)
+    // Сеть (KB/s, area): фикс 0–100, при превышении — адаптивно
     const netChart = mkLineOpt(labels, [
       mkSeries('↑ net_up KB/s', netUp, '#58a6ff', { areaStyle: { opacity: .15 } }),
       mkSeries('↓ net_down KB/s', netDown, '#3fb950', { areaStyle: { opacity: .15 } }),
-    ], 'KB/s', yMax([...netUp, ...netDown], 10));
+    ], 'KB/s', Math.max(100, yMax([...netUp, ...netDown], 10)));
 
     // Онлайн + open_conns (две оси)
     const connsChart = {
