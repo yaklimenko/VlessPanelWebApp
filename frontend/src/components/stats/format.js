@@ -33,6 +33,15 @@ export function fmtDur(sec) {
   return `${m}м ${pad(s)}с`;
 }
 
+// Округление до 4 значащих цифр (7839.6 → 7840, 143.55 → 143.6, 93.33 → 93.33)
+export function fmtNum4(v) {
+  if (v == null || isNaN(v)) return null;
+  if (v === 0) return 0;
+  const exp = Math.floor(Math.log10(Math.abs(v)));
+  const digits = Math.max(0, 3 - exp);
+  return +v.toFixed(Math.min(digits, 10));
+}
+
 // байты → «5.56 GB»
 export function fmtGB(bytes) {
   if (bytes == null || isNaN(bytes)) return '—';

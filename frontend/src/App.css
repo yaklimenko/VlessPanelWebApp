@@ -787,21 +787,26 @@ tr.run-row.open .t-chev { transform: rotate(90deg); color: var(--accent); }
   display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
 }
 .detail-head b { color: var(--text); }
-.kr-list { display: flex; flex-direction: column; }
-.kr-row {
-  display: flex; align-items: center; gap: 10px; padding: 5px 8px;
-  border-radius: var(--radius-sm); font-size: 12.5px;
+/* Таблица деталей прогона: все метрики демона по ключам */
+.kr-table-wrap { overflow-x: auto; }
+.kr-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.kr-table th {
+  background: #0d1117; padding: 6px 10px; text-align: left; font-weight: 500;
+  color: var(--text-secondary); border-bottom: 1px solid var(--border);
+  font-size: 10px; text-transform: uppercase; letter-spacing: .4px;
+  white-space: nowrap;
 }
-.kr-row:hover { background: rgba(255,255,255,.02); }
-.kr-row + .kr-row { border-top: 1px solid rgba(33,38,45,.6); }
-.kr-st { width: 22px; text-align: center; flex-shrink: 0; font-size: 13px; }
-.kr-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, monospace); font-size: 11.5px; color: var(--text); }
-.kr-svc { font-size: 11.5px; white-space: nowrap; width: 78px; text-align: center; }
-.kr-svc .g { color: var(--success); }
-.kr-svc .r { color: var(--danger); }
-.kr-svc .m { color: #6e7681; }
-.kr-lat { font-size: 11.5px; color: var(--text-secondary); font-family: var(--mono, monospace); width: 70px; text-align: right; white-space: nowrap; }
-.kr-lat.warn { color: var(--warn); }
+.kr-table td { padding: 5px 10px; border-bottom: 1px solid rgba(33,38,45,.6); white-space: nowrap; }
+.kr-table tr.kr-tr:hover td { background: rgba(255,255,255,.02); }
+.kr-table tr.kr-tr.warn td { background: rgba(187,128,9,.05); }
+.kr-th-st, .kr-th-num { text-align: center; }
+.kr-th-label { min-width: 140px; }
+.kr-th-ip { min-width: 110px; }
+.kr-st { text-align: center; width: 28px; font-size: 13px; }
+.kr-label { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, monospace); font-size: 11.5px; color: var(--text); }
+.kr-ip { font-family: var(--mono, monospace); font-size: 11.5px; color: var(--text-secondary); }
+.kr-num { text-align: center; font-family: var(--mono, monospace); font-size: 11.5px; color: var(--text); }
+.kr-num.warn { color: var(--warn); }
 
 @media (max-width: 1100px) {
   .chart-grid { grid-template-columns: 1fr; }

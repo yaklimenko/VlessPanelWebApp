@@ -80,15 +80,20 @@ type MetricsTestRun struct {
 
 // MetricsKeyResult — результат по ключу внутри прогона (test_key_results).
 type MetricsKeyResult struct {
-	ID        int64  `json:"id"`
-	KeyID     string `json:"keyId,omitempty"` // id SubKey из VlessPanel (связь с подпиской)
-	Label     string `json:"label"`
-	Status    string `json:"status"` // OK | FAIL | TIMEOUT | ERROR
-	IP        string `json:"ip,omitempty"`
-	YouTube   string `json:"youtube,omitempty"`
-	Instagram string `json:"instagram,omitempty"`
-	LatencyMs *int   `json:"latencyMs,omitempty"`
-	TestedAt  string `json:"testedAt"`
+	ID                int64   `json:"id"`
+	KeyID             string  `json:"keyId,omitempty"` // id SubKey из VlessPanel (связь с подпиской)
+	Label             string  `json:"label"`
+	Status            string  `json:"status"` // OK | FAIL | TIMEOUT | ERROR
+	IP                string  `json:"ip,omitempty"`
+	LatencyMs         *int    `json:"latencyMs,omitempty"`
+	AvgSpeedKbps      float64 `json:"avgSpeedKbps,omitempty"`
+	StabilityPct      float64 `json:"stabilityPct,omitempty"`
+	Reconnects        int     `json:"reconnects,omitempty"`
+	TotalDownloadedMB float64 `json:"totalDownloadedMb,omitempty"`
+	SessionsOK        int     `json:"sessionsOk,omitempty"`
+	SessionsFail      int     `json:"sessionsFail,omitempty"`
+	DurationSec       int     `json:"durationSec,omitempty"`
+	TestedAt          string  `json:"testedAt"`
 }
 
 // MetricsTestRunsResponse — ответ GET /api/metrics/test-runs.

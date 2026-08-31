@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"database/sql"
 	"log"
 	"os"
 	"path/filepath"
@@ -233,6 +234,101 @@ func TestMetricsDBInsertTestRunDedup(t *testing.T) {
 	}
 	if got.SubscriptionID != "Olga" || got.Status != "partial" || got.FailCount != 1 {
 		t.Errorf("прогон: %+v", got)
+	}
+}
+
+// Миграция: БД со старой схемой test_key_results (youtube/instagram) при
+// старте получает новые колонки метрик, старые колонки удаляются, данные
+// старых строк сохраняются (новые поля — NULL).
+func TestMetricsDBMigrateKeyResults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "metrics.db")
+
+	// Создаём БД со СТАРОЙ схемой (как было до расширения): только
+	// test_runs + test_key_results с youtube/instagram.
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSchema := []string{
+		`CREATE TABLE test_runs (
+			id              INTEGER PRIMARY KEY AUTOINCREMENT,
+			tester_id       INTEGER NOT NULL,
+			subscription_id TEXT NOT NULL,
+			status          TEXT NOT NULL DEFAULT 'running',
+			total           INTEGER NOT NULL DEFAULT 0,
+			ok_count        INTEGER NOT NULL DEFAULT 0,
+			fail_count      INTEGER NOT NULL DEFAULT 0,
+			error           TEXT,
+			started_at      TEXT NOT NULL DEFAULT (datetime('now')),
+			finished_at     TEXT
+		)`,
+		`CREATE TABLE test_key_results (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			run_id      INTEGER NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+			key_id      TEXT,
+			label       TEXT,
+			status      TEXT NOT NULL,
+			ip          TEXT,
+			youtube     TEXT,
+			instagram   TEXT,
+			latency_ms  INTEGER,
+			tested_at   TEXT NOT NULL DEFAULT (datetime('now'))
+		)`,
+		`INSERT INTO test_runs (id, tester_id, subscription_id, status) VALUES (1, 1, 'Olga', 'ok')`,
+		`INSERT INTO test_key_results (run_id, label, status, ip, youtube, instagram, latency_ms, tested_at)
+		 VALUES (1, 'PL1-Olga', 'OK', '1.2.3.4', '', '', 84, '2026-08-31T12:15:00.000000000Z')`,
+	}
+	for _, s := range oldSchema {
+		if _, err := raw.Exec(s); err != nil {
+			raw.Close()
+			t.Fatalf("old schema: %v\nstmt: %s", err, s)
+		}
+	}
+	raw.Close()
+
+	// Старт на старой БД → миграция накатывается.
+	db, err := NewMetricsDB(path, log.New(os.Stderr, "test: ", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	cols, err := db.tableColumns("test_key_results")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"avg_speed_kbps", "stability_pct", "reconnects",
+		"total_downloaded_mb", "sessions_ok", "sessions_fail", "duration_sec"} {
+		if !cols[name] {
+			t.Errorf("колонка %s не добавлена миграцией", name)
+		}
+	}
+
+	// Старые строки сохраняются, новые поля NULL.
+	kr, err := db.TestKeyResults(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kr) != 1 {
+		t.Fatalf("key results = %d, want 1", len(kr))
+	}
+	if kr[0].Label != "PL1-Olga" || kr[0].Status != "OK" || kr[0].IP != "1.2.3.4" {
+		t.Errorf("старая строка повреждена: %+v", kr[0])
+	}
+	if kr[0].AvgSpeedKbps != 0 || kr[0].SessionsOK != 0 {
+		t.Errorf("новые поля старых строк должны быть нулевыми: %+v", kr[0])
+	}
+
+	// Повторный старт — идемпотентно.
+	db.Close()
+	db2, err := NewMetricsDB(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db2.Close()
+	cols2, _ := db2.tableColumns("test_key_results")
+	if !cols2["avg_speed_kbps"] {
+		t.Errorf("повторная миграция сломала схему")
 	}
 }
 

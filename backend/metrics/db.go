@@ -115,19 +115,24 @@ func (m *MetricsDB) migrate() error {
 			finished_at     TEXT
 		)`,
 
-		// 🔑 Результаты по отдельным ключам внутри прогона
+		// 🔑 Результаты по отдельным ключам внутри прогона (все метрики демона)
 		`CREATE TABLE IF NOT EXISTS test_key_results (
-			id          INTEGER PRIMARY KEY AUTOINCREMENT,
-			run_id      INTEGER NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
-			key_id      TEXT,
-			label       TEXT,
-			status      TEXT NOT NULL,
-			ip          TEXT,
-			youtube     TEXT,
-			instagram   TEXT,
-			latency_ms  INTEGER,
-			tested_at   TEXT NOT NULL DEFAULT (datetime('now'))
-		)`,
+			id                INTEGER PRIMARY KEY AUTOINCREMENT,
+			run_id            INTEGER NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+			key_id            TEXT,
+			label             TEXT,
+			status            TEXT NOT NULL,
+			ip                TEXT,
+			latency_ms        INTEGER,
+			avg_speed_kbps    REAL,
+			stability_pct     REAL,
+			reconnects        INTEGER,
+			total_downloaded_mb REAL,
+			sessions_ok       INTEGER,
+			sessions_fail     INTEGER,
+			duration_sec      INTEGER,
+			tested_at         TEXT NOT NULL DEFAULT (datetime('now'))
+		) `,
 
 		// Панели (зеркало panels.json, чтобы metrics.db была самодостаточной)
 		`CREATE TABLE IF NOT EXISTS panels (
@@ -205,7 +210,80 @@ func (m *MetricsDB) migrate() error {
 			return fmt.Errorf("metrics db migrate: %w\nstmt: %s", err, s)
 		}
 	}
+	if err := m.migrateKeyResults(); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateKeyResults — миграция test_key_results со старой схемы (youtube/
+// instagram TEXT) на новую (метрики скорости/стабильности/сессий).
+// Идемпотентно: если колонок уже нет (свежая БД) или они уже добавлены —
+// ничего не делает. Старые колонки youtube/instagram удаляются (в крон-прогонах
+// они всегда пустые; DROP COLUMN — SQLite 3.35+; modernc.org/sqlite v1.34.5
+// тянет свежий SQLite, но на всякий случай ошибку DROP только логируем —
+// неиспользуемые колонки не мешают).
+func (m *MetricsDB) migrateKeyResults() error {
+	cols, err := m.tableColumns("test_key_results")
+	if err != nil {
+		return err
+	}
+	if !cols["youtube"] && !cols["instagram"] && cols["avg_speed_kbps"] {
+		return nil // уже новая схема
+	}
+
+	adds := []struct {
+		name string
+		typ  string
+	}{
+		{"avg_speed_kbps", "REAL"},
+		{"stability_pct", "REAL"},
+		{"reconnects", "INTEGER"},
+		{"total_downloaded_mb", "REAL"},
+		{"sessions_ok", "INTEGER"},
+		{"sessions_fail", "INTEGER"},
+		{"duration_sec", "INTEGER"},
+	}
+	for _, a := range adds {
+		if cols[a.name] {
+			continue
+		}
+		if _, err := m.db.Exec(fmt.Sprintf("ALTER TABLE test_key_results ADD COLUMN %s %s", a.name, a.typ)); err != nil {
+			return fmt.Errorf("migrate test_key_results add %s: %w", a.name, err)
+		}
+	}
+
+	for _, old := range []string{"youtube", "instagram"} {
+		if !cols[old] {
+			continue
+		}
+		if _, err := m.db.Exec("ALTER TABLE test_key_results DROP COLUMN " + old); err != nil {
+			m.log.Printf("metrics: не удалось удалить колонку %s (оставляю, не используется): %v", old, err)
+		}
+	}
+	m.log.Printf("metrics: test_key_results мигрирована (youtube/instagram → метрики скорости/стабильности/сессий)")
+	return nil
+}
+
+// tableColumns возвращает set имён колонок таблицы (PRAGMA table_info).
+func (m *MetricsDB) tableColumns(table string) (map[string]bool, error) {
+	rows, err := m.db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	cols := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var dflt interface{}
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
+			return nil, err
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
 }
 
 // bootstrap — при первом запуске (таблица testers пуста) вставляет текущего
@@ -603,16 +681,21 @@ type TestRun struct {
 
 // TestKeyResult — строка test_key_results.
 type TestKeyResult struct {
-	ID        int64
-	RunID     int64
-	KeyID     *string
-	Label     string
-	Status    string
-	IP        string
-	YouTube   string
-	Instagram string
-	LatencyMs *int
-	TestedAt  string
+	ID                int64
+	RunID             int64
+	KeyID             *string
+	Label             string
+	Status            string
+	IP                string
+	LatencyMs         *int
+	AvgSpeedKbps      float64
+	StabilityPct      float64
+	Reconnects        int
+	TotalDownloadedMB float64
+	SessionsOK        int
+	SessionsFail      int
+	DurationSec       int
+	TestedAt          string
 }
 
 // InsertTestRun пишет прогон + per-key результаты в одной транзакции.
@@ -652,9 +735,11 @@ func (m *MetricsDB) InsertTestRun(run *TestRun, keys []TestKeyResult) (int64, bo
 
 	for _, k := range keys {
 		if _, err := tx.Exec(`INSERT INTO test_key_results
-			(run_id, key_id, label, status, ip, youtube, instagram, latency_ms, tested_at)
-			VALUES (?,?,?,?,?,?,?,?,?)`,
-			runID, k.KeyID, k.Label, k.Status, k.IP, k.YouTube, k.Instagram, k.LatencyMs, k.TestedAt); err != nil {
+			(run_id, key_id, label, status, ip, latency_ms, avg_speed_kbps, stability_pct,
+			 reconnects, total_downloaded_mb, sessions_ok, sessions_fail, duration_sec, tested_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			runID, k.KeyID, k.Label, k.Status, k.IP, k.LatencyMs, k.AvgSpeedKbps, k.StabilityPct,
+			k.Reconnects, k.TotalDownloadedMB, k.SessionsOK, k.SessionsFail, k.DurationSec, k.TestedAt); err != nil {
 			return 0, false, err
 		}
 	}
@@ -718,8 +803,10 @@ func (m *MetricsDB) TestRunByID(id int64) (*TestRun, bool, error) {
 
 // TestKeyResults возвращает per-key результаты прогона.
 func (m *MetricsDB) TestKeyResults(runID int64) ([]TestKeyResult, error) {
-	rows, err := m.db.Query(`SELECT id, run_id, key_id, label, status, ip, youtube,
-		instagram, latency_ms, tested_at FROM test_key_results WHERE run_id = ? ORDER BY id`, runID)
+	rows, err := m.db.Query(`SELECT id, run_id, key_id, label, status, ip, latency_ms,
+		avg_speed_kbps, stability_pct, reconnects, total_downloaded_mb, sessions_ok,
+		sessions_fail, duration_sec, tested_at
+		FROM test_key_results WHERE run_id = ? ORDER BY id`, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -728,10 +815,20 @@ func (m *MetricsDB) TestKeyResults(runID int64) ([]TestKeyResult, error) {
 	var out []TestKeyResult
 	for rows.Next() {
 		var k TestKeyResult
+		var speed, stability, totalMB sql.NullFloat64
+		var reconnects, sessionsOK, sessionsFail, durSec sql.NullInt64
 		if err := rows.Scan(&k.ID, &k.RunID, &k.KeyID, &k.Label, &k.Status, &k.IP,
-			&k.YouTube, &k.Instagram, &k.LatencyMs, &k.TestedAt); err != nil {
+			&k.LatencyMs, &speed, &stability, &reconnects,
+			&totalMB, &sessionsOK, &sessionsFail, &durSec, &k.TestedAt); err != nil {
 			return nil, err
 		}
+		k.AvgSpeedKbps = speed.Float64
+		k.StabilityPct = stability.Float64
+		k.Reconnects = int(reconnects.Int64)
+		k.TotalDownloadedMB = totalMB.Float64
+		k.SessionsOK = int(sessionsOK.Int64)
+		k.SessionsFail = int(sessionsFail.Int64)
+		k.DurationSec = int(durSec.Int64)
 		out = append(out, k)
 	}
 	return out, rows.Err()

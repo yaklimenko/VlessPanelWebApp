@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api';
 import { EChart } from './EChart';
-import { fmtTomskSmart, fmtDur, avgOf } from './format';
+import { fmtTomskSmart, fmtDur, avgOf, fmtNum4 } from './format';
 
 const TOOLTIP = {
   trigger: 'axis',
@@ -28,14 +28,10 @@ const STATUS_TEXT = {
   running: { txt: '⏳ running', cls: 'st-partial' },
 };
 const KEY_ICON = { OK: '✅', FAIL: '❌', TIMEOUT: '❌', ERROR: '❌', DEGRADED: '⚠️' };
-const KEY_CLS = { OK: 'g', FAIL: 'r', TIMEOUT: 'r', ERROR: 'r', DEGRADED: 'm' };
-const SVC_CLS = { OK: 'g', FAIL: 'r' };
 
-// Ключ «деградировал»: частичный отказ (один сервис FAIL при общем не-FAIL статусе)
-const isDegraded = (k) =>
-  k.status === 'DEGRADED' ||
-  (k.status !== 'FAIL' && k.status !== 'TIMEOUT' && k.status !== 'ERROR' &&
-    ((k.youtube && k.youtube !== 'OK') || (k.instagram && k.instagram !== 'OK')));
+// Ключ «деградировал»: частичный отказ (status = DEGRADED). YT/IG в крон-прогонах
+// больше нет (speed-тест через probe_url) — смотрим только на статус.
+const isDegraded = (k) => k.status === 'DEGRADED';
 
 export function StatsTestsTab({ subscriptions }) {
   const [runs, setRuns] = useState(null);      // список прогонов (7д)
@@ -302,21 +298,57 @@ export function StatsTestsTab({ subscriptions }) {
                         ) : keys.length === 0 ? (
                           <div className="empty-state" style={{ padding: 12 }}><p style={{ fontSize: 12 }}>Нет результатов по ключам</p></div>
                         ) : (
-                          <div className="kr-list">
-                            {keys.map(k => {
-                              const icon = KEY_ICON[k.status] || '❔';
-                              const cls = KEY_CLS[k.status] || 'm';
-                              const lat = k.latencyMs != null ? k.latencyMs + ' ms' : '—';
-                              return (
-                                <div key={k.id} className="kr-row">
-                                  <span className="kr-st" title={k.status}>{icon}</span>
-                                  <span className="kr-label" title={k.label}>{k.label}</span>
-                                  <span className="kr-svc">YT: <span className={SVC_CLS[k.youtube] || 'm'}>{k.youtube || '—'}</span></span>
-                                  <span className="kr-svc">IG: <span className={SVC_CLS[k.instagram] || 'm'}>{k.instagram || '—'}</span></span>
-                                  <span className={'kr-lat' + (k.status === 'DEGRADED' || isDegraded(k) ? ' warn' : '')}>{lat}</span>
-                                </div>
-                              );
-                            })}
+                          <div className="kr-table-wrap">
+                            <table className="kr-table">
+                              <thead>
+                                <tr>
+                                  <th className="kr-th-st" title="Статус">Статус</th>
+                                  <th className="kr-th-label" title="Ключ">Ключ</th>
+                                  <th className="kr-th-ip" title="IP сервера">IP</th>
+                                  <th className="kr-th-num" title="Средняя скорость (Мбит/с)">⚡ Скорость</th>
+                                  <th className="kr-th-num" title="Стабильность соединения (%)">Стабильность</th>
+                                  <th className="kr-th-num" title="Успешные сессии / всего">Сессии</th>
+                                  <th className="kr-th-num" title="Переподключения">Реконнекты</th>
+                                  <th className="kr-th-num" title="Задержка (мс)">⏱ Latency</th>
+                                  <th className="kr-th-num" title="Скачано (MB)">Скачано</th>
+                                  <th className="kr-th-num" title="Длительность теста">Время</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {keys.map(k => {
+                                  const icon = KEY_ICON[k.status] || '❔';
+                                  const warn = isDegraded(k);
+                                  const speed = k.avgSpeedKbps != null && k.avgSpeedKbps > 0
+                                    ? (k.avgSpeedKbps / 1000).toFixed(1) + ' Мбит/с' : '—';
+                                  const stab = k.stabilityPct != null && k.stabilityPct > 0
+                                    ? fmtNum4(k.stabilityPct) + '%' : '—';
+                                  const sessOk = k.sessionsOk != null ? k.sessionsOk : 0;
+                                  const sessFail = k.sessionsFail != null ? k.sessionsFail : 0;
+                                  const sessions = (k.sessionsOk != null || k.sessionsFail != null)
+                                    ? sessOk + '/' + (sessOk + sessFail) : '—';
+                                  const reconn = k.reconnects != null && k.reconnects > 0 ? k.reconnects : '—';
+                                  const lat = k.latencyMs != null ? Math.round(k.latencyMs) + ' ms' : '—';
+                                  const dl = k.totalDownloadedMb != null && k.totalDownloadedMb > 0
+                                    ? fmtNum4(k.totalDownloadedMb) + ' MB' : '—';
+                                  const dur = k.durationSec != null && k.durationSec > 0
+                                    ? fmtDur(k.durationSec) : '—';
+                                  return (
+                                    <tr key={k.id} className={'kr-tr' + (warn ? ' warn' : '')}>
+                                      <td className="kr-st" title={k.status}>{icon}</td>
+                                      <td className="kr-label" title={k.label}>{k.label}</td>
+                                      <td className="kr-ip">{k.ip || '—'}</td>
+                                      <td className="kr-num">{speed}</td>
+                                      <td className="kr-num">{stab}</td>
+                                      <td className="kr-num">{sessions}</td>
+                                      <td className="kr-num">{reconn}</td>
+                                      <td className={'kr-num' + (warn ? ' warn' : '')}>{lat}</td>
+                                      <td className="kr-num">{dl}</td>
+                                      <td className="kr-num">{dur}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         )}
                       </div>

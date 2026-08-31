@@ -703,13 +703,19 @@ func (c *MetricsCollector) insertRun(testerID int64, run dto.DaemonRun, subsKeys
 	keyResults := make([]TestKeyResult, 0, len(keys))
 	for _, k := range keys {
 		keyResults = append(keyResults, TestKeyResult{
-			KeyID:     matchSubKeyID(subsKeys[subID], k.Remark),
-			Label:     k.Remark,
-			Status:    normalizeKeyStatus(k.Status),
-			IP:        k.IP,
-			YouTube:   k.Youtube,
-			Instagram: k.Instagram,
-			TestedAt:  run.StartedAt.UTC().Format(runTimeFormat),
+			KeyID:             matchSubKeyID(subsKeys[subID], k.Remark),
+			Label:             k.Remark,
+			Status:            normalizeKeyStatus(k.Status),
+			IP:                k.IP,
+			AvgSpeedKbps:      k.AvgSpeedKbps,
+			StabilityPct:      k.StabilityPct,
+			Reconnects:        k.Reconnects,
+			TotalDownloadedMB: k.TotalDownloadedMB,
+			SessionsOK:        k.SessionsOK,
+			SessionsFail:      k.SessionsFail,
+			DurationSec:       k.DurationSec,
+			LatencyMs:         floatToIntPtr(k.LatencyMs),
+			TestedAt:          run.StartedAt.UTC().Format(runTimeFormat),
 		})
 	}
 
@@ -749,6 +755,16 @@ func matchSubKeyID(keys []model.SubKey, remark string) *string {
 		}
 	}
 	return nil
+}
+
+// floatToIntPtr округляет float (latency_ms демона) до int и возвращает
+// указатель; для нулевых/отрицательных значений возвращает nil (нет данных).
+func floatToIntPtr(v float64) *int {
+	if v <= 0 {
+		return nil
+	}
+	i := int(math.Round(v))
+	return &i
 }
 
 // normalizeKeyStatus приводит статус ключа демона к словарю схемы

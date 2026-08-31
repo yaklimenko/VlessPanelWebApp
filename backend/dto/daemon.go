@@ -24,13 +24,20 @@ type DaemonRun struct {
 	Error           string          `json:"error,omitempty"`
 }
 
-// DaemonKeyResult — результат по одному ключу внутри прогона (TestResultItem демона).
+// DaemonKeyResult — результат по одному ключу внутри прогона (ProbeKeyResult
+// демона vlesssubtest: speed-тест через probe_url, без YT/IG).
 type DaemonKeyResult struct {
-	KeyIdx    int    `json:"key_idx"`
-	IP        string `json:"ip,omitempty"`
-	Remark    string `json:"remark,omitempty"`
-	Status    string `json:"status"`
-	Reason    string `json:"reason,omitempty"`
-	Youtube   string `json:"youtube"`
-	Instagram string `json:"instagram"`
+	KeyIdx            int     `json:"key_idx"`
+	Remark            string  `json:"remark,omitempty"`
+	IP                string  `json:"ip,omitempty"`
+	Status            string  `json:"status"`
+	AvgSpeedKbps      float64 `json:"avg_speed_kbps"`
+	StabilityPct      float64 `json:"stability_pct"`
+	Reconnects        int     `json:"reconnects"`
+	LatencyMs         float64 `json:"latency_ms"`
+	TotalDownloadedMB float64 `json:"total_downloaded_mb"`
+	SessionsOK        int     `json:"sessions_ok"`
+	SessionsFail      int     `json:"sessions_fail"`
+	DurationSec       int     `json:"duration_sec"`
+	Reason            string  `json:"reason,omitempty"`
 }

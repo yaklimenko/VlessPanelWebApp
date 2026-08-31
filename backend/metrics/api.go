@@ -425,14 +425,19 @@ func (h *MetricsHandlers) TestRunDetail(w http.ResponseWriter, r *http.Request) 
 	keyDTOs := make([]dto.MetricsKeyResult, 0, len(keys))
 	for _, k := range keys {
 		kd := dto.MetricsKeyResult{
-			ID:        k.ID,
-			Label:     k.Label,
-			Status:    k.Status,
-			IP:        k.IP,
-			YouTube:   k.YouTube,
-			Instagram: k.Instagram,
-			LatencyMs: k.LatencyMs,
-			TestedAt:  k.TestedAt,
+			ID:                k.ID,
+			Label:             k.Label,
+			Status:            k.Status,
+			IP:                k.IP,
+			LatencyMs:         k.LatencyMs,
+			AvgSpeedKbps:      k.AvgSpeedKbps,
+			StabilityPct:      k.StabilityPct,
+			Reconnects:        k.Reconnects,
+			TotalDownloadedMB: k.TotalDownloadedMB,
+			SessionsOK:        k.SessionsOK,
+			SessionsFail:      k.SessionsFail,
+			DurationSec:       k.DurationSec,
+			TestedAt:          k.TestedAt,
 		}
 		if k.KeyID != nil {
 			kd.KeyID = *k.KeyID

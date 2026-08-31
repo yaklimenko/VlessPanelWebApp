@@ -375,8 +375,10 @@ func TestCollectRuns(t *testing.T) {
 	finished := started.Add(90 * time.Second)
 
 	results, _ := json.Marshal([]dto.DaemonKeyResult{
-		{KeyIdx: 0, IP: "1.1.1.1", Remark: "PL1-Olga", Status: "OK", Youtube: "OK", Instagram: "OK"},
-		{KeyIdx: 1, IP: "2.2.2.2", Remark: "PL2-Olga", Status: "FAILED", Youtube: "FAIL", Instagram: "FAIL"},
+		{KeyIdx: 0, IP: "1.1.1.1", Remark: "PL1-Olga", Status: "OK",
+			AvgSpeedKbps: 7839.6, StabilityPct: 93.33, Reconnects: 1, LatencyMs: 84.33,
+			TotalDownloadedMB: 143.55, SessionsOK: 14, SessionsFail: 1, DurationSec: 181},
+		{KeyIdx: 1, IP: "2.2.2.2", Remark: "PL2-Olga", Status: "FAILED", Reason: "conn refused"},
 	})
 	daemon := &fakeDaemon{runs: []dto.DaemonRun{{
 		ID: "2026-08-31T06:15:00.000000000Z", Kind: "test",
@@ -413,8 +415,19 @@ func TestCollectRuns(t *testing.T) {
 	if keys[0].Status != "OK" || keys[1].Status != "FAIL" {
 		t.Errorf("статусы: %+v, %+v", keys[0].Status, keys[1].Status)
 	}
-	if keys[0].YouTube != "OK" || keys[1].YouTube != "FAIL" {
-		t.Errorf("youtube: %q, %q", keys[0].YouTube, keys[1].YouTube)
+	// Все метрики демона сохраняются.
+	k0 := keys[0]
+	if k0.AvgSpeedKbps != 7839.6 || k0.StabilityPct != 93.33 || k0.Reconnects != 1 {
+		t.Errorf("метрики скорости: %+v", k0)
+	}
+	if k0.TotalDownloadedMB != 143.55 || k0.SessionsOK != 14 || k0.SessionsFail != 1 || k0.DurationSec != 181 {
+		t.Errorf("метрики сессий/объёма: %+v", k0)
+	}
+	if k0.LatencyMs == nil || *k0.LatencyMs != 84 {
+		t.Errorf("latency_ms: %v, want 84", k0.LatencyMs)
+	}
+	if k0.IP != "1.1.1.1" || k0.Label != "PL1-Olga" {
+		t.Errorf("ip/label: %+v", k0)
 	}
 
 	// Повторный забор (после рестарта) — дедуп, дублей нет.

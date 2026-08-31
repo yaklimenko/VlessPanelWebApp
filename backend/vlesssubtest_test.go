@@ -73,7 +73,7 @@ func TestListRuns_ParseRFC3339Nano(t *testing.T) {
 				"ok": 5,
 				"failed": 0,
 				"results": [
-					{"key_idx": 0, "ip": "1.2.3.4", "remark": "PL1-TCP", "status": "OK", "youtube": "OK", "instagram": "OK"}
+					{"key_idx": 0, "ip": "1.2.3.4", "remark": "PL1-TCP", "status": "OK", "avg_speed_kbps": 7839.6, "stability_pct": 93.33, "latency_ms": 84.33, "total_downloaded_mb": 143.55, "sessions_ok": 14, "sessions_fail": 1, "duration_sec": 181}
 				]
 			},
 			{
@@ -88,7 +88,7 @@ func TestListRuns_ParseRFC3339Nano(t *testing.T) {
 				"degraded": 1,
 				"failed": 0,
 				"results": [
-					{"key_idx": 0, "ip": "5.6.7.8", "remark": "NL2-xHTTP", "status": "DEGRADED", "reason": "slow", "youtube": "SLOW", "instagram": "OK"}
+					{"key_idx": 0, "ip": "5.6.7.8", "remark": "NL2-xHTTP", "status": "DEGRADED", "reason": "slow"}
 				]
 			}
 		]
