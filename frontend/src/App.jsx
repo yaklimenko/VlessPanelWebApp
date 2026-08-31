@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useVlessPanel } from './hooks/useVlessPanel';
 import {
   ToastProvider,
-  Header, ClientCard,
+  Header, Sidebar, ClientCard, StatsPage,
   NewSubModal, KSDetailsModal, DeleteSubModal, DeleteKSModal, ReportModal,
   AddPanelModal, AddClientModal, AddManualKSModal, EditClientModal,
 } from './components';
@@ -12,6 +12,10 @@ import { AuthGate } from './components/AuthGate';
 const panelHost = (p) => { try { return new URL(p.url).hostname; } catch { return p.url || ''; } };
 
 function AppInner() {
+  const [activeView, setActiveView] = useState(() => {
+    try { return localStorage.getItem('vlesspanel:view') === 'stats' ? 'stats' : 'subscriptions'; } catch { return 'subscriptions'; }
+  });
+  const navigate = (v) => { setActiveView(v); try { localStorage.setItem('vlesspanel:view', v); } catch {} };
   const {
     panels, currentPanelId, setCurrentPanelId, clients, inbounds, clientsError,
     clientSearch, setClientSearch, loadingClients,
@@ -34,19 +38,26 @@ function AppInner() {
 
   return (
     <div className="app">
-      <Header
-        panels={panels}
-        selectedPanelId={currentPanelId}
-        onPanelChange={setCurrentPanelId}
-        onAddPanel={() => setShowAddPanel(true)}
-        onDeletePanel={handleDeletePanel}
-        onSyncAll={handleSyncAll}
-        syncing={syncing}
-        onRegenerateAll={handleRegenerateAll}
-        regenerating={regenerating}
-      />
+      <Sidebar activeView={activeView} onNavigate={navigate} />
 
-      <div className="main">
+      <div className="main-wrap">
+        <Header
+          panels={panels}
+          selectedPanelId={currentPanelId}
+          onPanelChange={setCurrentPanelId}
+          onAddPanel={() => setShowAddPanel(true)}
+          onDeletePanel={handleDeletePanel}
+          onSyncAll={handleSyncAll}
+          syncing={syncing}
+          onRegenerateAll={handleRegenerateAll}
+          regenerating={regenerating}
+          activeView={activeView}
+        />
+
+        {activeView === 'stats' ? (
+          <StatsPage panels={panels} subscriptions={subscriptions} showToast={showToast} />
+        ) : (
+          <div className="main">
         {/* ─── Left: panels → clients → inbound chips ─── */}
         <section className="col">
           <div className="col-header">
@@ -194,9 +205,10 @@ function AppInner() {
             )}
           </div>
         </section>
-      </div>
+        </div>
+        )}
 
-      {/* ─── Modals ─── */}
+        {/* ─── Modals ─── */}
       {showAddPanel && <AddPanelModal onClose={() => setShowAddPanel(false)} onSubmit={handleAddPanel} />}
       {showAddClient && <AddClientModal inbounds={inbounds} onClose={() => setShowAddClient(false)} onSubmit={handleCreateClient} />}
       {showAddManualKS && (
@@ -275,6 +287,7 @@ function AppInner() {
           onClose={() => setReport(null)}
         />
       )}
+      </div>
     </div>
   );
 }

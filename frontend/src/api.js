@@ -93,4 +93,11 @@ export const api = {
 
   // Sync with aggregator
   syncToAggregator: () => request('/sync', { method: 'POST' }),
+
+  // Metrics (Этап 3: раздел статистики)
+  metricsSnapshots: (panelId, range) => request(`/metrics/snapshots?panelId=${encodeURIComponent(panelId)}&range=${encodeURIComponent(range)}`),
+  metricsTestRuns: (range) => request(`/metrics/test-runs?range=${encodeURIComponent(range)}`),
+  metricsTestRunDetail: (id) => request(`/metrics/test-runs/${id}`),
+  metricsAvailability: () => request('/metrics/availability'),
+  metricsTesters: () => request('/metrics/testers'),
 };

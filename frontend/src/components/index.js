@@ -3,6 +3,8 @@ export { ToastProvider, useToast } from './Toast';
 export { Modal } from './Modal';
 export { fmtBytes, fmtDate, fmtShortDate, fmtDateTime } from './format';
 export { Header } from './Header';
+export { Sidebar } from './Sidebar';
+export { StatsPage } from './StatsPage';
 export { ClientCard } from './ClientCard';
 export { KSChip } from './KSChip';
 export { NewSubModal } from './NewSubModal';
