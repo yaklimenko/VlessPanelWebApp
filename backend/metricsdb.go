@@ -189,6 +189,15 @@ func (m *MetricsDB) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_snap        ON panel_snapshots(panel_id, ts DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_inb_traffic ON inbound_traffic(panel_id, ts)`,
 		`CREATE INDEX IF NOT EXISTS idx_cli_traffic ON client_traffic(panel_id, ts)`,
+
+		// TG-алерты: дедупликация/cooldown по ключу (panel_id + тип алерта)
+		`CREATE TABLE IF NOT EXISTS alert_states (
+			key           TEXT PRIMARY KEY,
+			state         INTEGER NOT NULL DEFAULT 0, -- 1 = условие болит, 0 = в норме
+			last_fired_at INTEGER NOT NULL DEFAULT 0, -- unix ts последней отправки алерта
+			last_ok_at    INTEGER NOT NULL DEFAULT 0, -- unix ts последней отправки OK
+			updated_at    INTEGER NOT NULL DEFAULT 0
+		)`,
 	}
 
 	for _, s := range stmts {
@@ -526,6 +535,48 @@ func (m *MetricsDB) ClientTrafficRows(panelID string, from, to int64) ([]ClientT
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// --- Состояние алертов (дедупликация) ---
+
+// AlertState — строка alert_states: последний известный статус условия по ключу
+// (panel_id + тип алерта). key хранит уже готовый составной ключ
+// (например "ram_high:one"), state — болит ли условие сейчас.
+// last_fired_at/last_ok_at — unix-ts последних отправок (cooldown против спама).
+type AlertState struct {
+	Key         string
+	State       int
+	LastFiredAt int64
+	LastOKAt    int64
+	UpdatedAt   int64
+}
+
+// GetAlertState возвращает состояние по ключу (nil, если его ещё нет).
+func (m *MetricsDB) GetAlertState(key string) (*AlertState, error) {
+	var s AlertState
+	err := m.db.QueryRow(`SELECT key, state, last_fired_at, last_ok_at, updated_at
+		FROM alert_states WHERE key = ?`, key).
+		Scan(&s.Key, &s.State, &s.LastFiredAt, &s.LastOKAt, &s.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// SetAlertState пишет состояние по ключу (upsert).
+func (m *MetricsDB) SetAlertState(s *AlertState) error {
+	_, err := m.db.Exec(`INSERT INTO alert_states (key, state, last_fired_at, last_ok_at, updated_at)
+		VALUES (?,?,?,?,?)
+		ON CONFLICT(key) DO UPDATE SET
+			state = excluded.state,
+			last_fired_at = excluded.last_fired_at,
+			last_ok_at = excluded.last_ok_at,
+			updated_at = excluded.updated_at`,
+		s.Key, s.State, s.LastFiredAt, s.LastOKAt, s.UpdatedAt)
+	return err
 }
 
 // --- Прогоны тестов ---

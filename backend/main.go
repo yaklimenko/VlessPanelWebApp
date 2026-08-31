@@ -48,6 +48,20 @@ func main() {
 	}
 	defer metricsDB.Close()
 
+	// TG-алерты (Этап 2): проверка порогов при каждом цикле сбора коллектора.
+	alertCfg := LoadAlertConfig()
+	var alerts *AlertManager
+	if alertCfg.Enabled {
+		alerts = NewAlertManager(metricsDB,
+			NewTGClient(alertCfg.BotToken, alertCfg.ChatID, alertCfg.SendTimeout, log.Default()),
+			alertCfg, log.Default())
+		log.Printf("  TG-алерты:     включены (RAM > %g%%, load1 > %g ядер×%.1f, трафик > %g×среднего за %s, тестер > %s, cooldown %s)",
+			alertCfg.RAMThresholdPct, alertCfg.LoadCores, alertCfg.LoadFactor,
+			alertCfg.TrafficMultiplier, alertCfg.TrafficWindow, alertCfg.StaleTesterAfter, alertCfg.Cooldown)
+	} else {
+		log.Printf("  TG-алерты:     выключены (нужны VLESSPANEL_TG_BOT_TOKEN и VLESSPANEL_TG_CHAT_ID)")
+	}
+
 	// Services (use-case layer).
 	daemon := NewVlessSubTestClient(config.VlessSubTestDaemonURL)
 	panels := NewPanelService(storage, panelAPI)
@@ -170,6 +184,7 @@ func main() {
 	// + retention (сутки). Останавливается вместе с сервером по ctx.
 	collector := NewMetricsCollector(metricsDB, storage, panelAPI, panelAPI, daemon,
 		config.VlessSubTestDaemonURL, log.Default())
+	collector.alerts = alerts // nil = алерты выключены
 	collector.Start(ctx)
 
 	go func() {

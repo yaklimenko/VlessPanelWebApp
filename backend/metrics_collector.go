@@ -62,6 +62,10 @@ type MetricsCollector struct {
 	// Собственность goroutine прогонов.
 	runsMu   sync.Mutex
 	lastRuns time.Time
+
+	// TG-алерты (Этап 2): проверка порогов после каждого цикла сбора.
+	// nil — алерты выключены (нет токена/chat_id).
+	alerts *AlertManager
 }
 
 type clientCounters struct{ up, down int64 }
@@ -132,6 +136,49 @@ func (c *MetricsCollector) collectTelemetry(now time.Time) {
 	for _, p := range panels {
 		c.collectPanel(p, now)
 	}
+
+	// Лёгкий контакт с демоном(ами) каждый цикл, чтобы last_heartbeat_at был
+	// свежим и алерт «тестер не отвечает» (дефолт 15 мин) был честным:
+	// полный контакт (забор прогонов) — раз в 6 часов, этого слишком редко.
+	c.touchTesterHeartbeats(now)
+	if c.alerts != nil {
+		c.alerts.CheckTesters()
+	}
+}
+
+// touchTesterHeartbeats — Status() демона раз в цикл сбора (5 мин) для
+// наших тестеров (base_url == daemonURL); успех продлевает heartbeat.
+// Ошибка только логируется — недоступность видит CheckTesters по протухшему
+// last_heartbeat_at.
+func (c *MetricsCollector) touchTesterHeartbeats(now time.Time) {
+	testers, err := c.db.ListTesters()
+	if err != nil {
+		c.log.Printf("metrics: testers (heartbeat): %v", err)
+		return
+	}
+	for _, t := range testers {
+		if t.Enabled == 0 {
+			continue
+		}
+		if strings.TrimRight(t.BaseURL, "/") != c.daemonURL {
+			continue // не наш демон — пропускаем (как в collectRuns)
+		}
+		st := c.daemon.Status()
+		if !st.Available {
+			c.log.Printf("metrics: демон %s не отвечает (heartbeat)", t.Name)
+			continue
+		}
+		if err := c.db.TouchTesterHeartbeat(t.ID, now); err != nil {
+			c.log.Printf("metrics: heartbeat тестера %s: %v", t.Name, err)
+		}
+	}
+}
+
+// panelDown — сигнал «панель не отдала телеметрию» в менеджер алертов.
+func (c *MetricsCollector) panelDown(p model.Panel, now time.Time) {
+	if c.alerts != nil {
+		c.alerts.CheckPanelDown(p)
+	}
 }
 
 // collectPanel собирает одну панель: status → history (параллельно) → inbounds.
@@ -141,17 +188,26 @@ func (c *MetricsCollector) collectPanel(p model.Panel, now time.Time) {
 	st, err := c.telemetry.ServerStatus(p)
 	if err != nil {
 		c.log.Printf("metrics: панель %s недоступна (server/status): %v", p.ID, err)
+		c.panelDown(p, now)
 		return
 	}
 
 	points, err := c.fetchHistory(p)
 	if err != nil {
 		c.log.Printf("metrics: панель %s недоступна (server/history): %v", p.ID, err)
+		c.panelDown(p, now)
 		return
 	}
 
-	if err := c.writeSnapshots(p, st, points, now); err != nil {
+	rec, wrote, err := c.writeSnapshots(p, st, points, now)
+	if err != nil {
 		c.log.Printf("metrics: запись снапшотов %s: %v", p.ID, err)
+		c.panelDown(p, now)
+	} else if wrote {
+		// Свежий снапшот записан — проверяем пороги (и снимаем panel_down).
+		if c.alerts != nil {
+			c.alerts.CheckPanel(p, rec)
+		}
 	}
 
 	inbounds, err := c.panelsAPI.ListInbounds(p)
@@ -295,7 +351,7 @@ func int64Ptr(v int64) *int64 { return &v }
 // прошлого окна приписываются текущему — за 5 минут их ровно ~5 штук).
 // Поля, которых нет в истории (swap/disk/open_conns/xray_ok + кумулятивные
 // netTraffic) — из server/status. lastSeen продвигается только при записи.
-func (c *MetricsCollector) writeSnapshots(p model.Panel, st *xui.ServerStatus, points map[string][]xui.HistoryPoint, now time.Time) error {
+func (c *MetricsCollector) writeSnapshots(p model.Panel, st *xui.ServerStatus, points map[string][]xui.HistoryPoint, now time.Time) (SnapshotRecord, bool, error) {
 	windowStart := now.UTC().Truncate(telemetryWindow).Unix()
 	lastSeen := c.lastSeen(p.ID, windowStart)
 
@@ -314,7 +370,7 @@ func (c *MetricsCollector) writeSnapshots(p model.Panel, st *xui.ServerStatus, p
 	}
 
 	if maxT == 0 {
-		return nil // новых точек нет — не пишем пустые окна
+		return SnapshotRecord{}, false, nil // новых точек нет — не пишем пустые окна
 	}
 
 	xrayOK := 1
@@ -345,12 +401,12 @@ func (c *MetricsCollector) writeSnapshots(p model.Panel, st *xui.ServerStatus, p
 		XrayOK:         xrayOK,
 	}
 	if err := c.db.InsertSnapshot(rec); err != nil {
-		return err
+		return SnapshotRecord{}, false, err
 	}
 
 	// Продвигаем lastSeen только после успешной записи.
 	c.lastTS[p.ID] = maxT
-	return nil
+	return rec, true, nil
 }
 
 // roundIntPtr округляет v до int; при n==0 возвращает nil.
