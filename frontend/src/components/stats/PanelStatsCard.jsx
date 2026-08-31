@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api';
 import { EChart } from './EChart';
-import { fmtTomsk, fmtGB, kbPerSec, avgOf, maxOf, yMax } from './format';
+import { fmtTomsk, fmtGB, mbPerSec, avgOf, maxOf, yMax } from './format';
 
 const panelHost = (p) => { try { return new URL(p.url).hostname; } catch { return p.url || ''; } };
 
@@ -87,8 +87,8 @@ export function PanelStatsCard({ panel, range, availability }) {
     const load1 = pts.map(p => num(p.load1Avg));
     const load5 = pts.map(p => num(p.load5Avg));
     const load15 = pts.map(p => num(p.load15Avg));
-    const netUp = pts.map(p => kbPerSec(p.netUp, bucket));
-    const netDown = pts.map(p => kbPerSec(p.netDown, bucket));
+    const netUp = pts.map(p => mbPerSec(p.netUp, bucket));
+    const netDown = pts.map(p => mbPerSec(p.netDown, bucket));
     const online = pts.map(p => num(p.onlineAvg));
     const conns = pts.map(p => num(p.openConnsMax));
     const last = pts[pts.length - 1];
@@ -115,11 +115,11 @@ export function PanelStatsCard({ panel, range, availability }) {
       mkSeries('load15', load15, '#8b949e'),
     ], 'load', 100, loadTip);
 
-    // Сеть (KB/s, area): фикс 0–100, при превышении — адаптивно
+    // Сеть (MB/s, area): база 0–1 MB/s, при превышении — адаптивно
     const netChart = mkLineOpt(labels, [
-      mkSeries('↑ net_up KB/s', netUp, '#58a6ff', { areaStyle: { opacity: .15 } }),
-      mkSeries('↓ net_down KB/s', netDown, '#3fb950', { areaStyle: { opacity: .15 } }),
-    ], 'KB/s', Math.max(100, yMax([...netUp, ...netDown], 10)));
+      mkSeries('↑ net_up MB/s', netUp, '#58a6ff', { areaStyle: { opacity: .15 } }),
+      mkSeries('↓ net_down MB/s', netDown, '#3fb950', { areaStyle: { opacity: .15 } }),
+    ], 'MB/s', Math.max(1, yMax([...netUp, ...netDown], 1)));
 
     // Онлайн + open_conns (две оси)
     const connsChart = {

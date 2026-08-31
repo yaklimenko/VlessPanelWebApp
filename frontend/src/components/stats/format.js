@@ -45,6 +45,12 @@ export function kbPerSec(bytes, bucketSec) {
   return +(bytes / bucketSec / 1024).toFixed(2);
 }
 
+// байты/бакет → MB/s (для графика сети)
+export function mbPerSec(bytes, bucketSec) {
+  if (bytes == null) return null;
+  return +(bytes / bucketSec / 1024 / 1024).toFixed(3);
+}
+
 // Средние значения по точкам (для подписей «avg 23.6% · max 28.9%»)
 export function avgOf(arr) {
   const vals = arr.filter(v => v != null);
