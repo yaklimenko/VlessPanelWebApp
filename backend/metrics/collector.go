@@ -1,4 +1,4 @@
-package main
+package metrics
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"vlesspanel/dto"
 	"vlesspanel/model"
 	"vlesspanel/xui"
 )
@@ -22,6 +23,28 @@ import (
 type TelemetryClient interface {
 	ServerStatus(panel model.Panel) (*xui.ServerStatus, error)
 	ServerHistory(panel model.Panel, metric string, bucket int) ([]xui.HistoryPoint, error)
+}
+
+// PanelStore — минимальный доступ к реестру панелей и подписок, нужный
+// коллектору. Реализация: *Storage (storage.go). Отделён интерфейсом, чтобы
+// подпакет metrics не зависел от корневого backend (нет циклического импорта).
+type PanelStore interface {
+	LoadPanels() ([]model.Panel, error)
+	ListSubscriptions() ([]model.Subscription, error)
+}
+
+// PanelAPI — клиент 3X-UI панели, нужный коллектору (инбаунды для трафика).
+// Реализация: *PanelAPI (panelapi.go). Сужается до фактически используемых
+// методов, чтобы подпакет metrics оставался standalone.
+type PanelAPI interface {
+	ListInbounds(panel model.Panel) ([]xui.XUIInbound, error)
+}
+
+// DaemonClient — клиент демона тестов (vlesssubtest), нужный коллектору.
+// Реализация: *vlessSubTestClient (vlesssubtest.go).
+type DaemonClient interface {
+	Status() dto.VlessSubTestStatus
+	ListRuns(from, to time.Time) ([]dto.DaemonRun, error)
 }
 
 // Параметры коллектора (Этап 1, решения из «Раздел статистики — задачи.md»).
@@ -47,10 +70,10 @@ var historyMetrics = []string{"cpu", "mem", "netUp", "netDown", "online", "load1
 //   - клиентский трафик — только дельты с прошлого среза, пустые не пишем.
 type MetricsCollector struct {
 	db        *MetricsDB
-	storage   *Storage
-	panelsAPI PanelClient
+	storage   PanelStore
+	panelsAPI PanelAPI
 	telemetry TelemetryClient
-	daemon    VlessSubTestClient
+	daemon    DaemonClient
 	daemonURL string // базовый URL демона (сверка с base_url тестера в БД)
 	log       *log.Logger
 
@@ -72,8 +95,8 @@ type clientCounters struct{ up, down int64 }
 
 // NewMetricsCollector создаёт коллектор. daemonURL — конфигурируемый адрес
 // демона (VLESSPANEL_VLESSSUBTEST_DAEMON_URL), по нему сверяем testers.base_url.
-func NewMetricsCollector(db *MetricsDB, storage *Storage, panelsAPI PanelClient,
-	telemetry TelemetryClient, daemon VlessSubTestClient, daemonURL string, logger *log.Logger) *MetricsCollector {
+func NewMetricsCollector(db *MetricsDB, storage PanelStore, panelsAPI PanelAPI,
+	telemetry TelemetryClient, daemon DaemonClient, daemonURL string, logger *log.Logger) *MetricsCollector {
 	if logger == nil {
 		logger = log.Default()
 	}
@@ -98,6 +121,10 @@ func (c *MetricsCollector) Start(ctx context.Context) {
 	go c.runsLoop(ctx)
 	go c.retentionLoop(ctx)
 }
+
+// SetAlerts подключает менеджер TG-алертов (nil — алерты выключены).
+// Вызывается из main после создания коллектора (поле неэкспортируемое).
+func (c *MetricsCollector) SetAlerts(a *AlertManager) { c.alerts = a }
 
 // --- Телеметрия панелей ---
 
@@ -595,7 +622,7 @@ func (c *MetricsCollector) collectRuns(now time.Time) {
 }
 
 // insertRun маппит прогон демона в test_runs + test_key_results.
-func (c *MetricsCollector) insertRun(testerID int64, run DaemonRun, subsKeys map[string][]model.SubKey) (bool, error) {
+func (c *MetricsCollector) insertRun(testerID int64, run dto.DaemonRun, subsKeys map[string][]model.SubKey) (bool, error) {
 	subID := subscriptionNameFromURL(run.SubscriptionURL)
 
 	status := "ok"
@@ -623,7 +650,7 @@ func (c *MetricsCollector) insertRun(testerID int64, run DaemonRun, subsKeys map
 		FinishedAt:     run.FinishedAt.UTC().Format(runTimeFormat),
 	}
 
-	var keys []DaemonKeyResult
+	var keys []dto.DaemonKeyResult
 	if len(run.Results) > 0 {
 		if err := json.Unmarshal(run.Results, &keys); err != nil {
 			c.log.Printf("metrics: прогон %s: разбор per-key результатов: %v", run.ID, err)

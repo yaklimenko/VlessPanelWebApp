@@ -1,4 +1,4 @@
-package main
+package metrics
 
 import (
 	"errors"
@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"vlesspanel/dto"
 	"vlesspanel/model"
 	"vlesspanel/xui"
 )
@@ -408,15 +407,13 @@ func TestCollectorAlertsPanelDown(t *testing.T) {
 
 	// Сначала панель работает (пишем историю), потом падает.
 	dir := t.TempDir()
-	storage := NewStorage(filepath.Join(dir, "panels.json"), filepath.Join(dir, "agg"), dir)
-	if _, err := storage.AddPanel(dto.CreatePanelRequest{Name: "One", URL: "https://one:1", Token: "t"}); err != nil {
-		t.Fatal(err)
-	}
 	db, err := NewMetricsDB(filepath.Join(dir, "metrics.db"), log.New(os.Stderr, "test: ", 0))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
+
+	storage := &fakePanelStore{panels: []model.Panel{{ID: "one", Name: "One", URL: "https://one:1", Token: "t"}}}
 
 	tel := &fakeTelemetry{status: testStatus(), history: fullHistory(base)}
 	c := NewMetricsCollector(db, storage, &fakePanelClient{}, tel, &fakeDaemon{}, "http://vlesssubtest:7070",

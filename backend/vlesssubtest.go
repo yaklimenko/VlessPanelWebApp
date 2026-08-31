@@ -58,31 +58,12 @@ func (c *vlessSubTestClient) TestSingle(vless string, timeout int) (dto.TestSing
 
 // DaemonRun — одна запись прогона из bbolt демона (зеркало RunRecord).
 // Results — сырой JSON-массив per-key результатов ([]DaemonKeyResult).
-type DaemonRun struct {
-	ID              string          `json:"id"`
-	Kind            string          `json:"kind"` // "test" | "probe"
-	SubscriptionURL string          `json:"subscription_url"`
-	StartedAt       time.Time       `json:"started_at"`
-	FinishedAt      time.Time       `json:"finished_at"`
-	DurationSec     int             `json:"duration_sec"`
-	Total           int             `json:"total"`
-	OK              int             `json:"ok"`
-	Degraded        int             `json:"degraded,omitempty"`
-	Failed          int             `json:"failed"`
-	Results         json.RawMessage `json:"results,omitempty"`
-	Error           string          `json:"error,omitempty"`
-}
+// Тип переехал в vlesspanel/dto (daemon.go) — общий для корневого backend и
+// подпакета backend/metrics; алиас оставлен, чтобы не менять точки вызова.
+type DaemonRun = dto.DaemonRun
 
 // DaemonKeyResult — результат по одному ключу внутри прогона (TestResultItem демона).
-type DaemonKeyResult struct {
-	KeyIdx    int    `json:"key_idx"`
-	IP        string `json:"ip,omitempty"`
-	Remark    string `json:"remark,omitempty"`
-	Status    string `json:"status"`
-	Reason    string `json:"reason,omitempty"`
-	Youtube   string `json:"youtube"`
-	Instagram string `json:"instagram"`
-}
+type DaemonKeyResult = dto.DaemonKeyResult
 
 // daemonRunsResponse — ответ GET /runs.
 type daemonRunsResponse struct {

@@ -11,6 +11,8 @@ import (
 	"syscall"
 
 	"github.com/go-chi/chi/v5"
+
+	"vlesspanel/metrics"
 )
 
 func main() {
@@ -42,18 +44,18 @@ func main() {
 	}
 
 	// Раздел статистики: SQLite-хранилище метрик + коллектор.
-	metricsDB, err := NewMetricsDB(config.MetricsDBPath, log.Default())
+	metricsDB, err := metrics.NewMetricsDB(config.MetricsDBPath, log.Default())
 	if err != nil {
 		log.Fatalf("metrics db: %v", err)
 	}
 	defer metricsDB.Close()
 
 	// TG-алерты (Этап 2): проверка порогов при каждом цикле сбора коллектора.
-	alertCfg := LoadAlertConfig()
-	var alerts *AlertManager
+	alertCfg := metrics.LoadAlertConfig()
+	var alerts *metrics.AlertManager
 	if alertCfg.Enabled {
-		alerts = NewAlertManager(metricsDB,
-			NewTGClient(alertCfg.BotToken, alertCfg.ChatID, alertCfg.SendTimeout, log.Default()),
+		alerts = metrics.NewAlertManager(metricsDB,
+			metrics.NewTGClient(alertCfg.BotToken, alertCfg.ChatID, alertCfg.SendTimeout, log.Default()),
 			alertCfg, log.Default())
 		log.Printf("  TG-алерты:     включены (RAM > %g%%, load1 > %g ядер×%.1f, трафик > %g×среднего за %s, тестер > %s, cooldown %s)",
 			alertCfg.RAMThresholdPct, alertCfg.LoadCores, alertCfg.LoadFactor,
@@ -71,7 +73,7 @@ func main() {
 	tokens := NewTokenService(storage, auth)
 
 	handlers := NewHandlers(auth, panels, subscriptions, keySources, syncSvc, tokens, daemon, config.PublicURL)
-	metricsHandlers := NewMetricsHandlers(metricsDB)
+	metricsHandlers := metrics.NewMetricsHandlers(metricsDB)
 
 	// Router
 	r := chi.NewRouter()
@@ -182,9 +184,9 @@ func main() {
 
 	// Коллектор метрик: телеметрия панелей (5 мин) + прогоны тестов (6ч :15)
 	// + retention (сутки). Останавливается вместе с сервером по ctx.
-	collector := NewMetricsCollector(metricsDB, storage, panelAPI, panelAPI, daemon,
+	collector := metrics.NewMetricsCollector(metricsDB, storage, panelAPI, panelAPI, daemon,
 		config.VlessSubTestDaemonURL, log.Default())
-	collector.alerts = alerts // nil = алерты выключены
+	collector.SetAlerts(alerts) // nil = алерты выключены
 	collector.Start(ctx)
 
 	go func() {

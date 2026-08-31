@@ -1,6 +1,7 @@
-package main
+package metrics
 
 import (
+	"encoding/json"
 	"math"
 	"net/http"
 	"sort"
@@ -11,6 +12,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
+
+// respondJSON/respondError — копии одноимённых хелперов из handlers.go корневого
+// backend: подпакет metrics standalone (не импортирует корневой пакет), поэтому
+// HTTP-ответы формирует сам. Поведение идентично.
+func respondJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
+}
+
+func respondError(w http.ResponseWriter, status int, message string) {
+	respondJSON(w, status, map[string]string{"error": message})
+}
 
 // MetricsHandlers — HTTP-транспорт раздела статистики (Этап 1, без UI).
 // Отдельная структура от Handlers: зависит только от MetricsDB, легко тестировать.

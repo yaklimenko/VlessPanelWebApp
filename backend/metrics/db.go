@@ -1,4 +1,4 @@
-package main
+package metrics
 
 import (
 	"database/sql"
@@ -302,6 +302,12 @@ func (m *MetricsDB) TouchTesterHeartbeat(id int64, at time.Time) error {
 	_, err := m.db.Exec(`UPDATE testers SET last_heartbeat_at = ?, updated_at = ? WHERE id = ?`,
 		at.UTC().Format(runTimeFormat), nowStr(), id)
 	return err
+}
+
+// nowStr — копия одноимённого хелпера из helpers.go корневого backend
+// (подпакет metrics standalone, корневой пакет не импортирует).
+func nowStr() string {
+	return time.Now().UTC().Format(time.RFC3339)
 }
 
 // --- Снапшоты панелей ---

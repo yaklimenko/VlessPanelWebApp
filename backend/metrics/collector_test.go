@@ -1,4 +1,4 @@
-package main
+package metrics
 
 import (
 	"encoding/json"
@@ -35,6 +35,43 @@ func (f *fakeTelemetry) ServerHistory(_ model.Panel, metric string, _ int) ([]xu
 	return f.history[metric], nil
 }
 
+// fakePanelStore — фейк PanelStore: панели и подписки без файлового хранилища.
+type fakePanelStore struct {
+	panels []model.Panel
+	subs   []model.Subscription
+}
+
+func (f *fakePanelStore) LoadPanels() ([]model.Panel, error)               { return f.panels, nil }
+func (f *fakePanelStore) ListSubscriptions() ([]model.Subscription, error) { return f.subs, nil }
+
+// fakePanelClient — фейк PanelAPI: только ListInbounds (нужен коллектору).
+type fakePanelClient struct {
+	PanelAPI
+	inbounds []xui.XUIInbound
+	err      error
+}
+
+func (f *fakePanelClient) ListInbounds(model.Panel) ([]xui.XUIInbound, error) {
+	return f.inbounds, f.err
+}
+
+// fakeDaemon — фейк DaemonClient: Status + ListRuns (остальные методы не нужны).
+type fakeDaemon struct {
+	DaemonClient
+	status dto.VlessSubTestStatus
+	runs   []dto.DaemonRun
+	err    error
+}
+
+func (f *fakeDaemon) Status() dto.VlessSubTestStatus { return f.status }
+
+func (f *fakeDaemon) ListRuns(time.Time, time.Time) ([]dto.DaemonRun, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.runs, nil
+}
+
 func testStatus() *xui.ServerStatus {
 	return &xui.ServerStatus{
 		CPU:      10,
@@ -48,14 +85,11 @@ func testStatus() *xui.ServerStatus {
 	}
 }
 
-// newCollectorFixture — storage с панелью p1 + коллектор на фейках.
-func newCollectorFixture(t *testing.T, tel *fakeTelemetry, inbounds []xui.XUIInbound, daemon *fakeDaemon) (*MetricsCollector, *MetricsDB, *Storage) {
+// newCollectorFixture — фейк PanelStore с панелью p1 (id "one") + коллектор на фейках.
+func newCollectorFixture(t *testing.T, tel *fakeTelemetry, inbounds []xui.XUIInbound, daemon *fakeDaemon) (*MetricsCollector, *MetricsDB, *fakePanelStore) {
 	t.Helper()
 	dir := t.TempDir()
-	storage := NewStorage(filepath.Join(dir, "panels.json"), filepath.Join(dir, "agg"), dir)
-	if _, err := storage.AddPanel(dto.CreatePanelRequest{Name: "One", URL: "https://one:1", Token: "t"}); err != nil {
-		t.Fatal(err)
-	}
+	storage := &fakePanelStore{panels: []model.Panel{{ID: "one", Name: "One", URL: "https://one:1", Token: "t"}}}
 
 	db, err := NewMetricsDB(filepath.Join(dir, "metrics.db"), log.New(os.Stderr, "test: ", 0))
 	if err != nil {
@@ -253,11 +287,11 @@ func TestCollectRuns(t *testing.T) {
 	started := time.Date(2026, 8, 31, 6, 15, 0, 0, time.UTC)
 	finished := started.Add(90 * time.Second)
 
-	results, _ := json.Marshal([]DaemonKeyResult{
+	results, _ := json.Marshal([]dto.DaemonKeyResult{
 		{KeyIdx: 0, IP: "1.1.1.1", Remark: "PL1-Olga", Status: "OK", Youtube: "OK", Instagram: "OK"},
 		{KeyIdx: 1, IP: "2.2.2.2", Remark: "PL2-Olga", Status: "FAILED", Youtube: "FAIL", Instagram: "FAIL"},
 	})
-	daemon := &fakeDaemon{runs: []DaemonRun{{
+	daemon := &fakeDaemon{runs: []dto.DaemonRun{{
 		ID: "2026-08-31T06:15:00.000000000Z", Kind: "test",
 		SubscriptionURL: "https://80.87.202.236/sub/Olga",
 		StartedAt:       started, FinishedAt: finished,
@@ -309,7 +343,7 @@ func TestCollectRuns(t *testing.T) {
 func TestCollectRunsFailedRun(t *testing.T) {
 	now := time.Date(2026, 8, 31, 12, 15, 0, 0, time.UTC)
 	started := time.Date(2026, 8, 31, 6, 15, 0, 0, time.UTC)
-	daemon := &fakeDaemon{runs: []DaemonRun{{
+	daemon := &fakeDaemon{runs: []dto.DaemonRun{{
 		ID: "x", Kind: "test",
 		SubscriptionURL: "https://80.87.202.236/sub/Olga",
 		StartedAt:       started, FinishedAt: started.Add(time.Minute),
