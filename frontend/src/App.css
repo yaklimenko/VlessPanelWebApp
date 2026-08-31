@@ -670,6 +670,8 @@ input, button, select, textarea { font-family: inherit; font-size: inherit; colo
 .xray-badge.err { background: var(--danger-faded); color: var(--danger); }
 .online-info { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
 .online-info b { color: var(--accent); font-weight: 600; }
+.disk-info { font-size: 12px; color: var(--text); white-space: nowrap; }
+.disk-info.warn { color: var(--danger); font-weight: 600; }
 .head-spacer { flex: 1; }
 .snap-info { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 

@@ -28,10 +28,10 @@ const DATAZOOM = [
 ];
 const GRID = { left: 46, right: 14, top: 28, bottom: 36 };
 
-function mkLineOpt(labels, series, yName, yMaxVal) {
+function mkLineOpt(labels, series, yName, yMaxVal, tooltip) {
   return {
     grid: GRID,
-    tooltip: TOOLTIP,
+    tooltip: tooltip || TOOLTIP,
     dataZoom: DATAZOOM,
     xAxis: {
       type: 'category', data: labels,
@@ -94,16 +94,18 @@ export function PanelStatsCard({ panel, range, availability }) {
     const last = pts[pts.length - 1];
 
     // RAM
+    const ramTip = { ...TOOLTIP, valueFormatter: (v) => (v == null ? '—' : Math.round(v) + ' %') };
     const ramChart = mkLineOpt(labels, [
       mkSeries('RAM avg %', ramAvg, '#58a6ff'),
       mkSeries('RAM max %', ramMax, '#d29922'),
-    ], 'RAM %', yMax([...ramAvg, ...ramMax], 60));
+    ], 'RAM %', yMax([...ramAvg, ...ramMax], 60), ramTip);
 
     // CPU
+    const cpuTip = { ...TOOLTIP, valueFormatter: (v) => (v == null ? '—' : Math.round(v) + ' %') };
     const cpuChart = mkLineOpt(labels, [
       mkSeries('CPU avg %', cpuAvg, '#3fb950'),
       mkSeries('CPU max %', cpuMax, '#f85149'),
-    ], 'CPU %', yMax([...cpuAvg, ...cpuMax], 12));
+    ], 'CPU %', yMax([...cpuAvg, ...cpuMax], 12), cpuTip);
 
     // Load
     const loadChart = mkLineOpt(labels, [
@@ -140,30 +142,15 @@ export function PanelStatsCard({ panel, range, availability }) {
       ]
     };
 
-    // Диск — горизонтальный бар
+    // Диск — в шапку (тайтл), тут не нужен
     const du = last.diskUsed != null ? last.diskUsed / (1024 ** 3) : null;
     const dt = last.diskTotal != null ? last.diskTotal / (1024 ** 3) : null;
-    const diskChart = dt != null && du != null ? {
-      grid: { left: 12, right: 14, top: 14, bottom: 18 },
-      tooltip: {
-        trigger: 'item',
-        backgroundColor: '#161b22', borderColor: '#21262d',
-        textStyle: { color: '#e6edf3', fontSize: 12 },
-        formatter: (pp) => pp.marker + ' ' + pp.seriesName + ': ' + pp.value + ' GB'
-      },
-      xAxis: { type: 'value', max: dt, show: false },
-      yAxis: { type: 'category', data: [''], show: false },
-      series: [
-        { name: 'Занято', type: 'bar', stack: 'd', data: [+du.toFixed(2)], barWidth: 16, itemStyle: { color: '#58a6ff', borderRadius: [4, 0, 0, 4] } },
-        { name: 'Свободно', type: 'bar', stack: 'd', data: [+(dt - du).toFixed(2)], itemStyle: { color: '#21262d', borderRadius: [0, 4, 4, 0] } }
-      ]
-    } : null;
 
     const lastXray = last.xrayOk === 1;
     return {
       labels, ramAvg, ramMax, cpuAvg, cpuMax, load1, load5, load15,
       netUp, netDown, online, conns, du, dt, last, lastXray,
-      ramChart, cpuChart, loadChart, netChart, connsChart, diskChart,
+      ramChart, cpuChart, loadChart, netChart, connsChart,
     };
   }, [data]);
 
@@ -217,6 +204,11 @@ export function PanelStatsCard({ panel, range, availability }) {
           {xrayOk ? '🟢 running' : '🔴 error'}
         </span>
         <span className="online-info">онлайн: <b>{onlineVal}</b></span>
+        {charts.du != null && charts.dt != null && (
+          <span className={'disk-info' + (Math.round(charts.du / charts.dt * 100) > 70 ? ' warn' : '')}>
+            Диск {charts.du.toFixed(2)} / {charts.dt.toFixed(2)} GB ({Math.round(charts.du / charts.dt * 100)}%)
+          </span>
+        )}
         <span className="head-spacer"></span>
         <span className="snap-info">последний снапшот: {fmtTomsk(last.ts)}</span>
       </div>
@@ -240,13 +232,6 @@ export function PanelStatsCard({ panel, range, availability }) {
         <div className="chart-box">
           <div className="chart-title">👥 Онлайн + open_conns {!xrayOk && <span className="val">(xray down)</span>}</div>
           <EChart option={charts.connsChart} />
-        </div>
-        <div className="chart-box">
-          <div className="chart-title">
-            💾 Диск <span className="val">{charts.du != null && charts.dt != null
-              ? `${charts.du.toFixed(2)} / ${charts.dt.toFixed(2)} GB (${Math.round(charts.du / charts.dt * 100)}%)` : '—'}</span>
-          </div>
-          {charts.diskChart ? <EChart option={charts.diskChart} /> : <div className="chart-empty">нет данных</div>}
         </div>
       </div>
     </div>
