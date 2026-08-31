@@ -57,9 +57,9 @@ func main() {
 		alerts = metrics.NewAlertManager(metricsDB,
 			metrics.NewTGClient(alertCfg.BotToken, alertCfg.ChatID, alertCfg.SendTimeout, log.Default()),
 			alertCfg, log.Default())
-		log.Printf("  TG-алерты:     включены (RAM > %g%%, load1 > %g ядер×%.1f, трафик > %g×среднего за %s, тестер > %s, cooldown %s)",
+		log.Printf("  TG-алерты:     включены (RAM > %g%%, load1 > %g ядер×%.1f, трафик > %g×среднего за %s и > %.0f MB/s, тестер > %s, cooldown %s)",
 			alertCfg.RAMThresholdPct, alertCfg.LoadCores, alertCfg.LoadFactor,
-			alertCfg.TrafficMultiplier, alertCfg.TrafficWindow, alertCfg.StaleTesterAfter, alertCfg.Cooldown)
+			alertCfg.TrafficMultiplier, alertCfg.TrafficWindow, alertCfg.TrafficMinMbs, alertCfg.StaleTesterAfter, alertCfg.Cooldown)
 	} else {
 		log.Printf("  TG-алерты:     выключены (нужны VLESSPANEL_TG_BOT_TOKEN и VLESSPANEL_TG_CHAT_ID)")
 	}

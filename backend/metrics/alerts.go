@@ -48,9 +48,10 @@ type AlertConfig struct {
 	RAMThresholdPct   float64       // VLESSPANEL_ALERT_RAM_PCT, дефолт 85 (% занятой RAM)
 	LoadCores         float64       // VLESSPANEL_ALERT_LOAD_CORES, дефолт 1 (ядер на панелях)
 	LoadFactor        float64       // VLESSPANEL_ALERT_LOAD_FACTOR, дефолт 1.0 (порог = ядра × фактор)
-	TrafficMultiplier float64       // VLESSPANEL_ALERT_TRAFFIC_MULT, дефолт 3 (× среднего)
+	TrafficMultiplier float64       // VLESSPANEL_ALERT_TRAFFIC_MULT, дефолт 5 (× среднего)
 	TrafficWindow     time.Duration // VLESSPANEL_ALERT_TRAFFIC_WINDOW, дефолт 24h (базлайн)
-	TrafficMinSamples int           // VLESSPANEL_ALERT_TRAFFIC_MIN_SAMPLES, дефолт 6 (мин. окон в базлайне)
+	TrafficMinSamples int           // VLESSPANEL_ALERT_TRAFFIC_MIN_SAMPLES, дефолт 24 (мин. окон в базлайне)
+	TrafficMinMbs     float64       // VLESSPANEL_ALERT_TRAFFIC_MIN_MBS, дефолт 2 (абс. минимум MB/s)
 	StaleTesterAfter  time.Duration // VLESSPANEL_ALERT_TESTER_STALE, дефолт 15m (сердцебиение тестера)
 	Cooldown          time.Duration // VLESSPANEL_ALERT_COOLDOWN, дефолт 6h (повторный алерт/OK)
 	SendTimeout       time.Duration // VLESSPANEL_ALERT_SEND_TIMEOUT, дефолт 10s
@@ -66,11 +67,12 @@ func LoadAlertConfig() AlertConfig {
 		RAMThresholdPct:   envFloat("VLESSPANEL_ALERT_RAM_PCT", 85),
 		LoadCores:         envFloat("VLESSPANEL_ALERT_LOAD_CORES", 1),
 		LoadFactor:        envFloat("VLESSPANEL_ALERT_LOAD_FACTOR", 1.0),
-		TrafficMultiplier: envFloat("VLESSPANEL_ALERT_TRAFFIC_MULT", 3),
+		TrafficMultiplier: envFloat("VLESSPANEL_ALERT_TRAFFIC_MULT", 5),
 		TrafficWindow:     envDuration("VLESSPANEL_ALERT_TRAFFIC_WINDOW", 24*time.Hour),
-		TrafficMinSamples: envInt("VLESSPANEL_ALERT_TRAFFIC_MIN_SAMPLES", 6),
+		TrafficMinSamples: envInt("VLESSPANEL_ALERT_TRAFFIC_MIN_SAMPLES", 24),
+		TrafficMinMbs:     envFloat("VLESSPANEL_ALERT_TRAFFIC_MIN_MBS", 2),
 		StaleTesterAfter:  envDuration("VLESSPANEL_ALERT_TESTER_STALE", 15*time.Minute),
-		Cooldown:          envDuration("VLESSPANEL_ALERT_COOLDOWN", 6*time.Hour),
+		Cooldown:          envDuration("VLESSPANEL_ALERT_COOLDOWN", 12*time.Hour),
 		SendTimeout:       envDuration("VLESSPANEL_ALERT_SEND_TIMEOUT", 10*time.Second),
 	}
 	if cfg.BotToken == "" || cfg.ChatID == "" {
@@ -188,9 +190,11 @@ func (a *AlertManager) CheckPanel(p model.Panel, rec SnapshotRecord) {
 		avgUp, avgDown, nUp, nDown := a.trafficBaseline(p.ID, rec.TS, now)
 		minN := a.cfg.TrafficMinSamples
 		upSpike := rec.NetUp != nil && nUp >= minN && avgUp > 0 &&
-			float64(*rec.NetUp) > a.cfg.TrafficMultiplier*avgUp
+			float64(*rec.NetUp) > a.cfg.TrafficMultiplier*avgUp &&
+			float64(*rec.NetUp) > a.cfg.TrafficMinMbs*1024*1024*float64(snapshotWindowSec)
 		downSpike := rec.NetDown != nil && nDown >= minN && avgDown > 0 &&
-			float64(*rec.NetDown) > a.cfg.TrafficMultiplier*avgDown
+			float64(*rec.NetDown) > a.cfg.TrafficMultiplier*avgDown &&
+			float64(*rec.NetDown) > a.cfg.TrafficMinMbs*1024*1024*float64(snapshotWindowSec)
 
 		key := alertKey(alertTraffic, p.ID)
 		if upSpike || downSpike {
