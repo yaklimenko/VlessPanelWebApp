@@ -78,8 +78,11 @@ func (c *vlessSubTestClient) ListRuns(from, to time.Time) ([]DaemonRun, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 
 	q := url.Values{}
-	q.Set("from", from.UTC().Format("2006-01-02T15:04:05"))
-	q.Set("to", to.UTC().Format("2006-01-02T15:04:05"))
+	// Демон (VlessSubTest/server.go parseTimeParam) принимает только YYYY-MM-DD
+	// или RFC3339/RFC3339Nano (с timezone). Формат без Z/offset парсится как
+	// 400 invalid time → test_runs оставались пустыми.
+	q.Set("from", from.UTC().Format(time.RFC3339))
+	q.Set("to", to.UTC().Format(time.RFC3339))
 	q.Set("detail", "1")
 	q.Set("limit", "1000")
 
