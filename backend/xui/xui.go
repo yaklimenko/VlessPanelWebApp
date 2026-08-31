@@ -42,6 +42,9 @@ type XUIInbound struct {
 	Settings       json.RawMessage    `json:"settings"`
 	StreamSettings *XUIStreamSettings `json:"streamSettings,omitempty"`
 	ClientStats    []XUIClientStats   `json:"clientStats"`
+	Up             int64              `json:"up"` // кумулятивные счётчики инбаунда
+	Down           int64              `json:"down"`
+	Total          int64              `json:"total"`
 }
 
 // XUIStreamSettings represents streamSettings in a 3X-UI inbound
@@ -72,4 +75,51 @@ type XUIResponse struct {
 	Success bool        `json:"success"`
 	Msg     string      `json:"msg"`
 	Obj     interface{} `json:"obj,omitempty"`
+}
+
+// --- Телеметрия (статистика, раздел статистики) ---
+
+// ServerStatus — живой снапшот системы с панели (GET /panel/api/server/status).
+// Панель кэширует его ~раз в 2 секунды; поля — по OpenAPI 3.7.0.
+type ServerStatus struct {
+	CPU      float64    `json:"cpu"`      // %
+	Mem      MemStats   `json:"mem"`      // current/total байт
+	Swap     MemStats   `json:"swap"`     // current/total байт
+	Disk     MemStats   `json:"disk"`     // current/total байт
+	NetIO    NetIOStats `json:"netIO"`    // кумулятивные счётчики байт
+	Xray     XrayState  `json:"xray"`     // состояние Xray
+	TCPCount int        `json:"tcpCount"` // открытые соединения
+	Load     LoadStats  `json:"load"`     // load average 1/5/15
+}
+
+// MemStats — счётчик current/total (RAM, swap или диск).
+type MemStats struct {
+	Current int64 `json:"current"`
+	Total   int64 `json:"total"`
+}
+
+// NetIOStats — кумулятивные сетевые счётчики панели.
+type NetIOStats struct {
+	Up   int64 `json:"up"`
+	Down int64 `json:"down"`
+}
+
+// XrayState — состояние Xray из server/status.
+type XrayState struct {
+	State   string `json:"state"`
+	Version string `json:"version"`
+}
+
+// LoadStats — load average 1/5/15.
+type LoadStats struct {
+	Load1  float64 `json:"load1"`
+	Load5  float64 `json:"load5"`
+	Load15 float64 `json:"load15"`
+}
+
+// HistoryPoint — одна точка истории панели (GET /panel/api/server/history/{metric}/{bucket}).
+// t — unix-таймстемп (секунды, UTC), v — значение метрики в бакете.
+type HistoryPoint struct {
+	T int64   `json:"t"`
+	V float64 `json:"v"`
 }

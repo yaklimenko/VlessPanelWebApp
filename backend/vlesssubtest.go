@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -51,4 +52,76 @@ func (c *vlessSubTestClient) TestSingle(vless string, timeout int) (dto.TestSing
 		return dto.TestSingleResponse{}, fmt.Errorf("%w: %v", ErrDaemonParse, err)
 	}
 	return single, nil
+}
+
+// --- Забор результатов прогонов (GET /runs) ---
+
+// DaemonRun — одна запись прогона из bbolt демона (зеркало RunRecord).
+// Results — сырой JSON-массив per-key результатов ([]DaemonKeyResult).
+type DaemonRun struct {
+	ID              string          `json:"id"`
+	Kind            string          `json:"kind"` // "test" | "probe"
+	SubscriptionURL string          `json:"subscription_url"`
+	StartedAt       time.Time       `json:"started_at"`
+	FinishedAt      time.Time       `json:"finished_at"`
+	DurationSec     int             `json:"duration_sec"`
+	Total           int             `json:"total"`
+	OK              int             `json:"ok"`
+	Degraded        int             `json:"degraded,omitempty"`
+	Failed          int             `json:"failed"`
+	Results         json.RawMessage `json:"results,omitempty"`
+	Error           string          `json:"error,omitempty"`
+}
+
+// DaemonKeyResult — результат по одному ключу внутри прогона (TestResultItem демона).
+type DaemonKeyResult struct {
+	KeyIdx    int    `json:"key_idx"`
+	IP        string `json:"ip,omitempty"`
+	Remark    string `json:"remark,omitempty"`
+	Status    string `json:"status"`
+	Reason    string `json:"reason,omitempty"`
+	Youtube   string `json:"youtube"`
+	Instagram string `json:"instagram"`
+}
+
+// daemonRunsResponse — ответ GET /runs.
+type daemonRunsResponse struct {
+	Total int         `json:"total"`
+	Runs  []DaemonRun `json:"runs"`
+}
+
+// ListRuns забирает прогоны демона за полуинтервал [from, to) с per-key
+// деталями (detail=1). Ошибки сети оборачиваются в ErrDaemonUnreachable,
+// ошибки разбора — в ErrDaemonParse.
+func (c *vlessSubTestClient) ListRuns(from, to time.Time) ([]DaemonRun, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	q := url.Values{}
+	q.Set("from", from.UTC().Format("2006-01-02T15:04:05"))
+	q.Set("to", to.UTC().Format("2006-01-02T15:04:05"))
+	q.Set("detail", "1")
+	q.Set("limit", "1000")
+
+	resp, err := client.Get(c.baseURL + "/runs?" + q.Encode())
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDaemonUnreachable, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDaemonParse, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: daemon HTTP %d: %s", ErrDaemonParse, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var out daemonRunsResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDaemonParse, err)
+	}
+	if out.Runs == nil {
+		out.Runs = []DaemonRun{}
+	}
+	return out.Runs, nil
 }

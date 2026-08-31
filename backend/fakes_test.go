@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"vlesspanel/dto"
 	"vlesspanel/model"
@@ -98,10 +99,18 @@ type fakeDaemon struct {
 	VlessSubTestClient
 	status  dto.VlessSubTestStatus
 	results []dto.TestSingleResponse
+	runs    []DaemonRun
 	err     error
 }
 
 func (f *fakeDaemon) Status() dto.VlessSubTestStatus { return f.status }
+
+func (f *fakeDaemon) ListRuns(time.Time, time.Time) ([]DaemonRun, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.runs, nil
+}
 
 func (f *fakeDaemon) TestSingle(string, int) (dto.TestSingleResponse, error) {
 	if f.err != nil {

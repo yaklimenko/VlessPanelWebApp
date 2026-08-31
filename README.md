@@ -180,6 +180,7 @@ go build -o vlesssubtest .
 | `VLESSPANEL_PUBLIC_URL`               | `https://example.com`      | Публичный базовый URL агрегатора (ссылки `…/sub/{name}`) |
 | `VLESSPANEL_SYNC_SCRIPT`              | `/opt/aggregator-configs/sync-configs.sh` | rsync-скрипт синхронизации агрегатора |
 | `VLESSPANEL_ADMIN_TOKEN`              | — (пусто)                  | Master-токен; пусто = auth выключена            |
+| `VLESSPANEL_METRICS_DB`               | `<DATA_DIR>/metrics.db`    | SQLite раздела статистики (`/data/metrics.db`) |
 
 Таймауты HTTP-сервера (значения — Go duration, например `30s`, `2m`):
 
@@ -256,6 +257,24 @@ curl -s http://localhost:9090/api/panels -H "Authorization: Bearer $VLESSPANEL_A
 | GET     | `/api/tokens`                | Список выпущенных API-токенов (master)      |
 | POST    | `/api/tokens`                | Выпустить API-токен (master)                |
 | DELETE  | `/api/tokens/:id`            | Отозвать API-токен (master)                 |
+
+### Статистика (Этап 1: коллектор + БД + API метрик, без UI)
+
+Коллектор в бэкенде раз в 5 минут опрашивает панели (server/status +
+server/history/{metric}/60 + inbounds/list) и пишет агрегаты в SQLite
+`/data/metrics.db` (схема — в `klemNotes/VPN/VlessPanel/Раздел статистики — БД.md`).
+Забор инкрементальный, недоступные панели не долбятся (пропуск данных — сигнал).
+Прогоны тестов забираются с демона каждые 6 часов со сдвигом на 15 минут
+(00:15/06:15/12:15/18:15). Retention — 3 месяца (чистка при старте + раз в сутки).
+
+| Метод   | Путь                                  | Описание                                    |
+| ------- | ------------------------------------- | ------------------------------------------- |
+| GET     | `/api/metrics/testers`                | Реестр тестировщиков (bootstrap: minicloud) |
+| GET     | `/api/metrics/snapshots?range=&panelId=` | Снапшоты панели, `range` = 24h/7d/90d (агрегация в бакеты) |
+| GET     | `/api/metrics/traffic?range=&panelId=&groupBy=` | Трафик инбаундов (дельты на чтении) или клиентов, `groupBy` = inbound/client |
+| GET     | `/api/metrics/test-runs?range=`       | Прогоны тестов подписок                     |
+| GET     | `/api/metrics/test-runs/{id}`         | Прогон + per-key результаты                 |
+| GET     | `/api/metrics/availability`           | Последний снапшот по панелям (сигнал недоступности) |
 
 ## Тестирование ключей
 

@@ -41,6 +41,13 @@ func main() {
 		}
 	}
 
+	// Раздел статистики: SQLite-хранилище метрик + коллектор.
+	metricsDB, err := NewMetricsDB(config.MetricsDBPath, log.Default())
+	if err != nil {
+		log.Fatalf("metrics db: %v", err)
+	}
+	defer metricsDB.Close()
+
 	// Services (use-case layer).
 	daemon := NewVlessSubTestClient(config.VlessSubTestDaemonURL)
 	panels := NewPanelService(storage, panelAPI)
@@ -50,6 +57,7 @@ func main() {
 	tokens := NewTokenService(storage, auth)
 
 	handlers := NewHandlers(auth, panels, subscriptions, keySources, syncSvc, tokens, daemon, config.PublicURL)
+	metricsHandlers := NewMetricsHandlers(metricsDB)
 
 	// Router
 	r := chi.NewRouter()
@@ -102,6 +110,14 @@ func main() {
 		// Utility
 		r.Get("/vlesssubtest-status", handlers.GetVlessSubTestStatus)
 
+		// Статистика (Этап 1: коллектор + БД + API метрик, без UI)
+		r.Get("/metrics/testers", metricsHandlers.Testers)
+		r.Get("/metrics/snapshots", metricsHandlers.Snapshots)
+		r.Get("/metrics/traffic", metricsHandlers.Traffic)
+		r.Get("/metrics/test-runs", metricsHandlers.TestRuns)
+		r.Get("/metrics/test-runs/{id}", metricsHandlers.TestRunDetail)
+		r.Get("/metrics/availability", metricsHandlers.Availability)
+
 		// API tokens (admin only)
 		r.Route("/tokens", func(r chi.Router) {
 			r.Use(requireAdmin)
@@ -149,6 +165,12 @@ func main() {
 	// текущих запросов в пределах config.ShutdownTimeout.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Коллектор метрик: телеметрия панелей (5 мин) + прогоны тестов (6ч :15)
+	// + retention (сутки). Останавливается вместе с сервером по ctx.
+	collector := NewMetricsCollector(metricsDB, storage, panelAPI, panelAPI, daemon,
+		config.VlessSubTestDaemonURL, log.Default())
+	collector.Start(ctx)
 
 	go func() {
 		<-ctx.Done()

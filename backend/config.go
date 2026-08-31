@@ -25,6 +25,9 @@ type Config struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	ShutdownTimeout   time.Duration
+
+	// MetricsDBPath — SQLite раздела статистики (по умолчанию /data/metrics.db).
+	MetricsDBPath string
 }
 
 // LoadConfig loads configuration from environment variables with defaults
@@ -59,6 +62,11 @@ func LoadConfig() Config {
 		dataDir = filepath.Dir(panelsFile)
 	}
 
+	metricsDBPath := os.Getenv("VLESSPANEL_METRICS_DB")
+	if metricsDBPath == "" {
+		metricsDBPath = filepath.Join(dataDir, "metrics.db")
+	}
+
 	publicURL := os.Getenv("VLESSPANEL_PUBLIC_URL")
 	if publicURL == "" {
 		publicURL = "https://example.com"
@@ -81,6 +89,7 @@ func LoadConfig() Config {
 		PublicURL:             publicURL,
 		SyncScript:            syncScript,
 		AdminToken:            adminToken,
+		MetricsDBPath:         metricsDBPath,
 		ReadHeaderTimeout:     envDuration("VLESSPANEL_READ_HEADER_TIMEOUT", 10*time.Second),
 		ReadTimeout:           envDuration("VLESSPANEL_READ_TIMEOUT", 30*time.Second),
 		WriteTimeout:          envDuration("VLESSPANEL_WRITE_TIMEOUT", 2*time.Minute),

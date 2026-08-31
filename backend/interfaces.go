@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"vlesspanel/dto"
 	"vlesspanel/model"
@@ -70,6 +71,7 @@ type PanelClient interface {
 type VlessSubTestClient interface {
 	Status() dto.VlessSubTestStatus
 	TestSingle(vless string, timeout int) (dto.TestSingleResponse, error)
+	ListRuns(from, to time.Time) ([]DaemonRun, error)
 }
 
 // AggregatorSyncer — интерфейс синка файлов с агрегатором.
